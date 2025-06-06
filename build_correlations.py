@@ -2,45 +2,58 @@ import sys
 import pandas as pd
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import math
+import yaml
 import time
 import gc
-import numba
-import scienceplots
-from time_units import TO_S, TO_US, TO_MIN, TO_NS
+from time_units import TO_S, TO_US, TO_NS
 
-plt.style.use('science')
 
 # ============================================================================
 # ============================================================================
 # ANALYSIS CONFIGURATION
 # ============================================================================
 
-# Adjust these parameters before running the script. They were previously
-# provided via command-line options.
+# Configuration is provided via a YAML file so that users can easily
+# customise PPAC coincidence windows and correlation chains.  The default
+# file is ``correlation_config.yaml`` in the current directory.
 
-window_before_ns = 1700   # Time window before implant for PPAC coincidence (ns)
-window_after_ns = 0       # Time window after implant for PPAC coincidence (ns)
-min_ppac_hits = 3         # Require at least this many PPAC detectors
+CONFIG_PATH = 'correlation_config.yaml'
 
-# Correlation chain specification.  Edit this list to build N-step correlations.
-# Each step defines the decay type that should follow the previous one along with
-# optional energy and time gates.
-correlation_chain = [
-    {
-        'label': 'alpha',
-        'type': 'alpha',
-        'energy_min': 8100,   # keV
-        'energy_max': 8400,   # keV
-        'recoil_energy_min': 2000,  # keV, applied to the recoil step only
-        'recoil_energy_max': 8099,  # keV
-        'corr_min': 0.08,     # s
-        'corr_max': 10        # s
-    }
-    # Additional steps can be appended here
-]
+if os.path.exists(CONFIG_PATH):
+    with open(CONFIG_PATH, 'r') as f:
+        config = yaml.safe_load(f)
+else:
+    config = {}
+
+ppac_cfg = config.get('ppac_window', {})
+window_before_ns = ppac_cfg.get('before_ns', 1700)
+window_after_ns = ppac_cfg.get('after_ns', 0)
+min_ppac_hits = ppac_cfg.get('min_hits', 3)
+
+correlation_chains = config.get('chains', [])
+if not correlation_chains:
+    # Fallback to a simple alpha correlation if no config provided
+    correlation_chains = [
+        {
+            'name': 'alpha_only',
+            'steps': [
+                {
+                    'label': 'recoil',
+                    'ppac_required': True,
+                    'energy_min': 0,
+                    'energy_max': np.inf,
+                },
+                {
+                    'label': 'alpha',
+                    'ppac_required': False,
+                    'energy_min': 8100,
+                    'energy_max': 8400,
+                    'corr_min': 0.08,
+                    'corr_max': 10,
+                },
+            ],
+        }
+    ]
 
 # =============================================================================
 # 1. DATA LOADING WITH MEMORY OPTIMIZATIONS
@@ -282,18 +295,6 @@ coincident_imp_df['dt_cathode_us'] = coincident_imp_df['dt_cathode_ps'] * TO_US
 coincident_imp_df['dt_anodeV_us'] = coincident_imp_df['dt_anodeV_ps'] * TO_US
 coincident_imp_df['dt_anodeH_us'] = coincident_imp_df['dt_anodeH_ps'] * TO_US
 
-# Plot raw E-ToF
-plt.figure(figsize=(8, 4))
-fs = 18
-plt.scatter(coincident_imp_df['imp_xE'], coincident_imp_df['dt_anodeH_us'],
-            alpha=0.2, s=1, c='blue')
-plt.xlabel("SHREC implant energy (keV)", fontsize=fs)
-plt.ylabel(r"AnodeH ToF ($\mu$s)", fontsize=fs)
-plt.title("Raw E-ToF", fontsize=fs+2)
-plt.xlim(0, 14000)
-plt.ylim(-1.7, -1.35)
-plt.grid(True, alpha=0.3)
-plt.savefig("plots/raw_etof.pdf", dpi=1000)
 
 # Apply manual board offsets using vectorized mapping
 manual_offsets = {
@@ -377,302 +378,81 @@ else:
 # Calculate log time difference between decay candidate and recoil event
 if not decay_candidates_df.empty:
     decay_candidates_df['log_dt'] = np.log(np.abs(decay_candidates_df['t'] - decay_candidates_df['recoil_time_sec']))
-    # Plotting 2D histogram for decay events (e.g., decay energy vs. log time difference)
-    plt.figure(figsize=(8, 4))
-    plt.hist2d(decay_candidates_df['yE'], decay_candidates_df['log_dt'],
-               bins=(500, 50), range=((0, 10000), (-3, 3)), cmin=1)
-    plt.xlabel('Decay energy (keV)', fontsize=fs)
-    plt.ylabel(r'Ln($\Delta$t/ s)/ 10 keV', fontsize=fs)
-    plt.title('Decay events: KHS vs energy', fontsize=fs+2)
-    plt.savefig('plots/decay_khs.pdf', dpi=1000)
+
 
 # =============================================================================
-# 8. ALPHA ENERGY, TIME GATES, AND CORRELATION WITH RECOILS
-# =============================================================================
-# Set energy and time gates from configuration
-
-# Pull settings from the first correlation step
-step_cfg = correlation_chain[0]
-alpha_energy_min = step_cfg.get('energy_min', 0)
-alpha_energy_max = step_cfg.get('energy_max', 1e9)
-recoil_energy_min = step_cfg.get('recoil_energy_min', 0)
-recoil_energy_max = step_cfg.get('recoil_energy_max', 1e9)
-alpha_corr_min = step_cfg.get('corr_min', 0)
-alpha_corr_max = step_cfg.get('corr_max', np.inf)
-
-# Filter alpha candidates by energy on the 'xE' column
-filtered_alpha_candidates = decay_candidates_df[
-    (decay_candidates_df['xE'] >= alpha_energy_min) &
-    (decay_candidates_df['xE'] <= alpha_energy_max)
-].copy()
-
-# Ensure there is a time column; it should already be there from imp_sorted grouping
-if 't' not in filtered_alpha_candidates.columns:
-    filtered_alpha_candidates['t'] = filtered_alpha_candidates['tagx'] * TO_S
-
-# Initialize new columns for recoil correlation
-filtered_alpha_candidates['closest_recoil_index'] = np.nan
-filtered_alpha_candidates['recoil_time'] = np.nan
-filtered_alpha_candidates['time_difference'] = np.nan
-filtered_alpha_candidates['recoil_energy'] = np.nan
-
-# For each alpha candidate, find the preceding recoil in the same pixel from the coincident events
-for idx, alpha in filtered_alpha_candidates.iterrows():
-    pixel_x = alpha['x']
-    pixel_y = alpha['y']
-    alpha_time = alpha['t']
-    
-    # Retrieve all recoil events in the same pixel from the coincident IMP events
-    recoils_in_pixel = coincident_imp_df[
-        (coincident_imp_df['imp_x'] == pixel_x) & (coincident_imp_df['imp_y'] == pixel_y)
-    ]
-    # Apply recoil energy gate on the recoil energy (imp_xE)
-    recoils_in_pixel = recoils_in_pixel[
-        (recoils_in_pixel['imp_xE'] >= recoil_energy_min) &
-        (recoils_in_pixel['imp_xE'] <= recoil_energy_max)
-    ]
-    # Only consider recoils that occurred before the alpha candidate
-    recoils_before = recoils_in_pixel[recoils_in_pixel['t'] < alpha_time]
-    
-    if not recoils_before.empty:
-        recoils_before = recoils_before.copy()
-        recoils_before['time_diff'] = alpha_time - recoils_before['t']
-        # Ensure the time difference is within the correlation window
-        recoils_in_window = recoils_before[
-            (recoils_before['time_diff'] >= alpha_corr_min) &
-            (recoils_before['time_diff'] <= alpha_corr_max)
-        ]
-        if not recoils_in_window.empty:
-            # Choose the recoil event with the smallest time difference
-            closest_recoil = recoils_in_window.loc[recoils_in_window['time_diff'].idxmin()]
-            filtered_alpha_candidates.at[idx, 'closest_recoil_index'] = closest_recoil.name
-            filtered_alpha_candidates.at[idx, 'recoil_time'] = closest_recoil['t']
-            filtered_alpha_candidates.at[idx, 'time_difference'] = closest_recoil['time_diff']
-            filtered_alpha_candidates.at[idx, 'recoil_energy'] = closest_recoil['imp_xE']
-        else:
-            filtered_alpha_candidates.at[idx, 'closest_recoil_index'] = np.nan
-            filtered_alpha_candidates.at[idx, 'recoil_time'] = np.nan
-            filtered_alpha_candidates.at[idx, 'time_difference'] = np.nan
-            filtered_alpha_candidates.at[idx, 'recoil_energy'] = np.nan
-    else:
-        filtered_alpha_candidates.at[idx, 'closest_recoil_index'] = np.nan
-        filtered_alpha_candidates.at[idx, 'recoil_time'] = np.nan
-        filtered_alpha_candidates.at[idx, 'time_difference'] = np.nan
-        filtered_alpha_candidates.at[idx, 'recoil_energy'] = np.nan
-
-# Build the correlated events DataFrame by dropping rows with no recoil correlation
-correlated_events = filtered_alpha_candidates.dropna(subset=['closest_recoil_index'])
-print("Number of correlated alpha-recoil events:", len(correlated_events))
-print(correlated_events.head())
-
-# =============================================================================
-# 9. MERGE RECOIL AND ALPHA INFORMATION FOR FINAL CORRELATION ANALYSIS
+# 8. GENERIC CORRELATION BUILDING
 # =============================================================================
 
-# Rename columns in coincident_imp_df (recoil info) with a prefix "rec_"
-recoil_rename = {
-    'imp_timetag': 'rec_timetag',
-    'imp_x': 'rec_x',
-    'imp_y': 'rec_y',
-    'imp_tagx': 'rec_tagx',
-    'imp_tagy': 'rec_tagy',
-    'imp_nfile': 'rec_nfile',
-    'imp_tdelta': 'rec_tdelta',
-    'imp_nX': 'rec_nX',
-    'imp_nY': 'rec_nY',
-    'imp_xE': 'rec_xE',
-    'imp_yE': 'rec_yE',
-    'xboard': 'rec_xboard',
-    'yboard': 'rec_yboard',
-    'cathode_timetag': 'rec_cathode_timetag',
-    'cathode_energy': 'rec_cathode_energy',
-    'cathode_board': 'rec_cathode_board',
-    'cathode_channel': 'rec_cathode_channel',
-    'cathode_nfile': 'rec_cathode_nfile',
-    'anodeV_timetag': 'rec_anodeV_timetag',
-    'anodeV_energy': 'rec_anodeV_energy',
-    'anodeV_board': 'rec_anodeV_board',
-    'anodeV_channel': 'rec_anodeV_channel',
-    'anodeV_nfile': 'rec_anodeV_nfile',
-    'anodeH_timetag': 'rec_anodeH_timetag',
-    'anodeH_energy': 'rec_anodeH_energy',
-    'anodeH_board': 'rec_anodeH_board',
-    'anodeH_channel': 'rec_anodeH_channel',
-    'anodeH_nfile': 'rec_anodeH_nfile',
-    't': 'rec_t',
-    'dt_anodeH_us_corr': 'rec_dt_anodeH_us_corr',
-    'dt_anodeV_us_corr': 'rec_dt_anodeV_us_corr',
-    'dt_cathode_us_corr': 'rec_dt_cathode_us_corr'
-}
-recoil_df_renamed = coincident_imp_df.copy().rename(columns=recoil_rename)
+def correlate_events(recoil_df, decay_df, chain):
+    """Build correlations for a single chain configuration."""
+    steps = chain['steps']
+    first = steps[0]
+    recoils = recoil_df[(recoil_df['xE'] >= first.get('energy_min', 0)) &
+                        (recoil_df['xE'] <= first.get('energy_max', np.inf))].copy()
+    recoils.rename(columns={'x': f"{first['label']}_x",
+                            'y': f"{first['label']}_y",
+                            't': f"{first['label']}_t",
+                            'xE': f"{first['label']}_xE"}, inplace=True)
+    stage_df = recoils
+    prev_label = first['label']
 
-# Rename columns in the alpha (correlated) events with prefix "alpha_"
-alpha_rename = {
-    't': 'alpha_t',
-    'x': 'alpha_x',
-    'y': 'alpha_y',
-    'tagx': 'alpha_tagx',
-    'tagy': 'alpha_tagy',
-    'nfile': 'alpha_nfile',
-    'xboard': 'alpha_xboard',
-    'yboard': 'alpha_yboard',
-    'tdelta': 'alpha_tdelta',
-    'nX': 'alpha_nX',
-    'nY': 'alpha_nY',
-    'xE': 'alpha_xE',
-    'yE': 'alpha_yE',
-    'recoil_index': 'alpha_recoil_index',
-    'recoil_time_sec': 'alpha_recoil_time',
-    'time_difference': 'alpha_time_difference',
-    'recoil_energy': 'alpha_recoil_energy'
-}
-alpha_df_renamed = correlated_events.copy().rename(columns=alpha_rename)
+    for step in steps[1:]:
+        label = step['label']
+        dataset = recoil_df if step.get('ppac_required') else decay_df
+        e_min = step.get('energy_min', 0)
+        e_max = step.get('energy_max', np.inf)
+        dt_min = step.get('corr_min', 0)
+        dt_max = step.get('corr_max', np.inf)
+        results = []
+        for _, row in stage_df.iterrows():
+            pix = (row[f'{prev_label}_x'], row[f'{prev_label}_y'])
+            pixel_events = dataset[(dataset['x'] == pix[0]) & (dataset['y'] == pix[1])]
+            after = pixel_events[pixel_events['t'] > row[f'{prev_label}_t']]
+            energy_sel = after[(after['xE'] >= e_min) & (after['xE'] <= e_max)]
+            if energy_sel.empty:
+                continue
+            energy_sel = energy_sel.copy()
+            energy_sel['dt'] = energy_sel['t'] - row[f'{prev_label}_t']
+            window = energy_sel[(energy_sel['dt'] >= dt_min) & (energy_sel['dt'] <= dt_max)]
+            if window.empty:
+                continue
+            evt = window.iloc[0]
+            new_row = row.to_dict()
+            new_row[f'{label}_x'] = evt['x']
+            new_row[f'{label}_y'] = evt['y']
+            new_row[f'{label}_t'] = evt['t']
+            new_row[f'{label}_xE'] = evt['xE']
+            new_row[f'{label}_dt'] = evt['dt']
+            results.append(new_row)
+        stage_df = pd.DataFrame(results)
+        if stage_df.empty:
+            break
+        prev_label = label
+    stage_df['chain'] = chain.get('name', 'chain')
+    return stage_df
 
-# Merge the alpha and recoil DataFrames using the recoil index
-final_correlated_df = alpha_df_renamed.merge(
-    recoil_df_renamed,
-    left_on='alpha_recoil_index',
-    right_index=True,
-    how='left'
-)
+# Prepare simplified recoil and decay tables
+recoil_df = coincident_imp_df[['imp_x', 'imp_y', 'imp_xE', 'imp_timetag']].copy()
+recoil_df.rename(columns={'imp_x': 'x', 'imp_y': 'y', 'imp_xE': 'xE', 'imp_timetag': 'timetag'}, inplace=True)
+recoil_df['t'] = recoil_df['timetag'] * TO_S
 
-print("Final correlated events dataframe:")
-print(final_correlated_df.head())
-print("Pixel match check (alpha vs. recoil):")
-print(final_correlated_df[['alpha_x', 'alpha_y', 'rec_x', 'rec_y']].head())
+decay_df = non_coincident_imp_df[['x', 'y', 'xE', 'timetag']].copy()
+decay_df['t'] = decay_df['timetag'] * TO_S
 
-# ============================================================================
-# Save key DataFrames for later use
+all_results = []
+for chain in correlation_chains:
+    res = correlate_events(recoil_df, decay_df, chain)
+    if not res.empty:
+        all_results.append(res)
+
+if all_results:
+    final_correlated_df = pd.concat(all_results, ignore_index=True)
+else:
+    final_correlated_df = pd.DataFrame()
+
+# Save results
 os.makedirs("analysis_output", exist_ok=True)
 coincident_imp_df.to_pickle("analysis_output/coincident_imp.pkl")
 decay_candidates_df.to_pickle("analysis_output/decay_candidates.pkl")
 final_correlated_df.to_pickle("analysis_output/final_correlated.pkl")
-
-# 9b. OPTIONAL ADDITIONAL CORRELATION STEPS
-# ============================================================================
-
-def correlate_step(prev_df, cfg, base_time_col):
-    """Generic correlation step using the configuration dictionary."""
-    label = cfg.get('label', 'step')
-    events_df = imp_sorted  # correlations use implant-region events
-    e_min = cfg.get('energy_min', 0)
-    e_max = cfg.get('energy_max', 1e9)
-    t_min = cfg.get('corr_min', 0)
-    t_max = cfg.get('corr_max', np.inf)
-    results = []
-    for _, row in prev_df.iterrows():
-        if 'x' in events_df.columns:
-            pixel_events = events_df[(events_df['x'] == row['rec_x']) & (events_df['y'] == row['rec_y'])]
-        else:
-            pixel_events = events_df
-        events_after = pixel_events[pixel_events['t'] > row[base_time_col]]
-        energy_col = 'xE' if 'xE' in events_after.columns else 'energy'
-        energy_sel = events_after[(events_after[energy_col] >= e_min) & (events_after[energy_col] <= e_max)]
-        if energy_sel.empty:
-            continue
-        energy_sel = energy_sel.copy()
-        energy_sel['dt'] = energy_sel['t'] - row[base_time_col]
-        in_window = energy_sel[(energy_sel['dt'] >= t_min) & (energy_sel['dt'] <= t_max)]
-        if in_window.empty:
-            continue
-        evt = in_window.iloc[0]
-        new_row = row.to_dict()
-        new_row[f'{label}_t'] = evt['t']
-        if 'xE' in evt:
-            new_row[f'{label}_xE'] = evt['xE']
-        if 'yE' in evt:
-            new_row[f'{label}_yE'] = evt['yE']
-        new_row[f'{label}_dt'] = evt['dt']
-        results.append(new_row)
-    return pd.DataFrame(results)
-
-# Apply additional correlation steps specified in correlation_chain
-if len(correlation_chain) > 1:
-    stage_df = final_correlated_df
-    time_col = f"{correlation_chain[0].get('label', 'step')}_t"
-    for step in correlation_chain[1:]:
-        stage_df = correlate_step(stage_df, step, time_col)
-        time_col = f"{step.get('label','step')}_t"
-    final_correlated_df = stage_df
-
-# Compute additional columns if needed
-final_correlated_df['log_dt'] = np.log10(np.abs(final_correlated_df['alpha_t'] - final_correlated_df['rec_t']))
-final_correlated_df['rec_alpha_time'] = np.abs(final_correlated_df['alpha_t'] - final_correlated_df['rec_t'])
-
-# =============================================================================
-# 10. PLOTTING CORRELATED RESULTS
-# =============================================================================
-
-fs = 16
-plt.figure(figsize=(13, 7))
-plt.subplot(221)
-plt.scatter(final_correlated_df['alpha_xE'], final_correlated_df['rec_alpha_time'],
-            s=10, color='red', alpha=0.7, label=r'Correlated $\alpha$')
-plt.xlabel('SHREC alpha X-Energy (keV)', fontsize=fs)
-plt.ylabel('Correlation time (s)', fontsize=fs)
-plt.xlim(alpha_energy_min, alpha_energy_max)
-plt.yscale('log')
-plt.legend(fontsize=fs-4, loc='lower left', frameon=True)
-plt.ylim(0.001, 20)
-plt.title(r'Correlation time vs $\alpha$ energy', fontsize=fs+2)
-
-plt.subplot(222)
-plt.hist2d(decay_candidates_df['xE'], decay_candidates_df['log_dt'],
-           bins=(500, 50), range=((5000, 10000), (-3, 3)))
-plt.fill_betweenx(y=[np.log(alpha_corr_min), np.log(alpha_corr_max)], x1=5000, x2=10000,
-                  color='g', alpha=0.2, label=r'$^{246}$Fm gate')
-plt.xlabel('Decay energy (keV)', fontsize=fs)
-plt.ylabel(r'Ln($\Delta$t/ s)/ 10 keV', fontsize=fs)
-plt.title('Decay events: KHS vs energy', fontsize=fs+2)
-plt.legend(fontsize=fs-4, loc='upper left', frameon=True)
-plt.savefig('plots/log_time_corr_alphas.pdf', dpi=300)
-
-# Correlated E-ToF plot
-plt.figure(figsize=(8, 4))
-plt.hexbin(coincident_imp_df['imp_xE'], coincident_imp_df['dt_anodeH_us'],
-           gridsize=200, extent=(0, 10000, -1.7, -1.5), mincnt=1)
-plt.scatter(final_correlated_df['rec_xE'], final_correlated_df['rec_dt_anodeH_us_corr'],
-            color='red', alpha=0.4, s=20, label=r'$\alpha$-tagged')
-plt.ylim(-1.625, -1.49)
-plt.xlim(0, 10000)
-plt.xlabel('SHREC implant energy (keV)', fontsize=fs)
-plt.ylabel(r'ToF ($\mu$s/ 50 keV)', fontsize=fs)
-plt.title(r'$\alpha$-correlated E-ToF', fontsize=fs+2)
-plt.legend(loc='lower right', fontsize=fs-4)
-plt.savefig('plots/correlated_etof.pdf', dpi=300)
-
-# Correlated beam spot
-plt.figure(figsize=(8, 3))
-plt.hist2d(final_correlated_df['rec_x'], final_correlated_df['rec_y'],
-           bins=(175, 61), range=((-1, 174), (-1, 60)), cmin=1)
-plt.xlabel('x-strip', fontsize=fs)
-plt.ylabel('y-strip', fontsize=fs)
-plt.title(r'$\alpha$ correlated, recoil beam spot', fontsize=fs+2)
-plt.colorbar()
-plt.savefig('plots/correlated_stripX_stripY.pdf', dpi=300)
-
-# Beam spot projections
-plt.figure(figsize=(12, 6))
-plt.subplot(221)
-plt.hist(final_correlated_df['rec_x'], histtype='step', bins=175, range=(-1, 174))
-plt.xlabel('x-strip', fontsize=fs)
-plt.ylabel('Counts', fontsize=fs)
-plt.subplot(222)
-plt.hist(final_correlated_df['rec_y'], histtype='step', bins=60, range=(-1, 60))
-plt.xlabel('y-strip', fontsize=fs)
-plt.ylabel('Counts', fontsize=fs)
-plt.savefig('plots/correlated_beam_spot_projections.pdf', dpi=300)
-
-# Recoil and alpha energy histograms
-plt.figure(figsize=(12, 6))
-plt.subplot(221)
-plt.hist(final_correlated_df['alpha_xE'], histtype='step', bins=60)
-plt.xlabel('Alpha energy (keV)', fontsize=fs)
-plt.ylabel('Counts / 10 keV', fontsize=fs)
-plt.subplot(222)
-plt.hist(final_correlated_df['rec_xE'], histtype='step', bins=175, range=(0, 10000))
-plt.xlabel('Recoil energy (keV)', fontsize=fs)
-plt.ylabel('Counts / 40 keV', fontsize=fs)
-plt.savefig('plots/rec_alpha_energy_projections.pdf', dpi=300)
-
-plt.show()
