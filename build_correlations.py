@@ -18,7 +18,7 @@ from time_units import TO_S, TO_US, TO_NS
 # file is ``correlation_config.yaml`` in the current directory.
 
 CONFIG_PATH = 'correlation_config.yaml'
-RUN_DIR = os.environ.get('RUN_DIR', 'r47_to_r58')
+RUN_DIR = os.environ.get('RUN_DIR', 'long_run_4mbar_500V')
 
 def _to_float_if_str(value):
     """Convert numeric strings to floats, leaving other values unchanged."""
