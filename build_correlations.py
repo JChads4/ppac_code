@@ -237,22 +237,13 @@ for idx, imp_row in imp_sorted.iterrows():
             'imp_yE': imp_row['yE'],
             'xboard': imp_row['xboard'],
             'yboard': imp_row['yboard'],
-            # PPAC data
+            # PPAC data (only timetag and energy)
             'cathode_timetag': cathode_data.get('timetag'),
             'cathode_energy': cathode_data.get('energy'),
-            'cathode_board': cathode_data.get('board'),
-            'cathode_channel': cathode_data.get('channel'),
-            'cathode_nfile': cathode_data.get('nfile'),
             'anodeV_timetag': anodeV_data.get('timetag'),
             'anodeV_energy': anodeV_data.get('energy'),
-            'anodeV_board': anodeV_data.get('board'),
-            'anodeV_channel': anodeV_data.get('channel'),
-            'anodeV_nfile': anodeV_data.get('nfile'),
             'anodeH_timetag': anodeH_data.get('timetag'),
             'anodeH_energy': anodeH_data.get('energy'),
-            'anodeH_board': anodeH_data.get('board'),
-            'anodeH_channel': anodeH_data.get('channel'),
-            'anodeH_nfile': anodeH_data.get('nfile'),
             # Time differences
             'dt_cathode_ps': dt_cathode_ps,
             'dt_anodeV_ps': dt_anodeV_ps,
@@ -457,8 +448,32 @@ def correlate_events(recoil_df, decay_df, chain):
     return stage_df
 
 # Prepare simplified recoil and decay tables
-recoil_df = coincident_imp_df[['imp_x', 'imp_y', 'imp_xE', 'imp_timetag']].copy()
-recoil_df.rename(columns={'imp_x': 'x', 'imp_y': 'y', 'imp_xE': 'xE', 'imp_timetag': 'timetag'}, inplace=True)
+# Include PPAC timetag and energy information so it propagates to the final
+# correlation results. Electrode values will be NaN if that detector did not
+# record a hit.
+recoil_df = coincident_imp_df[
+    [
+        'imp_x',
+        'imp_y',
+        'imp_xE',
+        'imp_timetag',
+        'cathode_timetag',
+        'cathode_energy',
+        'anodeV_timetag',
+        'anodeV_energy',
+        'anodeH_timetag',
+        'anodeH_energy',
+    ]
+].copy()
+recoil_df.rename(
+    columns={
+        'imp_x': 'x',
+        'imp_y': 'y',
+        'imp_xE': 'xE',
+        'imp_timetag': 'timetag',
+    },
+    inplace=True,
+)
 recoil_df['t'] = recoil_df['timetag'] * TO_S
 
 decay_df = non_coincident_imp_df[['x', 'y', 'xE', 'timetag']].copy()
