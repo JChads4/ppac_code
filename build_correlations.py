@@ -19,18 +19,32 @@ from time_units import TO_S, TO_US, TO_NS
 
 CONFIG_PATH = 'correlation_config.yaml'
 
+def _to_float_if_str(value):
+    """Convert numeric strings to floats, leaving other values unchanged."""
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return value
+    return value
+
 if os.path.exists(CONFIG_PATH):
     with open(CONFIG_PATH, 'r') as f:
         config = yaml.safe_load(f)
 else:
     config = {}
 
-ppac_cfg = config.get('ppac_window', {})
+ppac_cfg = {k: _to_float_if_str(v) for k, v in config.get('ppac_window', {}).items()}
 window_before_ns = ppac_cfg.get('before_ns', 1700)
 window_after_ns = ppac_cfg.get('after_ns', 0)
 min_ppac_hits = ppac_cfg.get('min_hits', 3)
 
 correlation_chains = config.get('chains', [])
+for chain in correlation_chains:
+    for step in chain.get('steps', []):
+        for key in ['energy_min', 'energy_max', 'corr_min', 'corr_max']:
+            if key in step:
+                step[key] = _to_float_if_str(step[key])
 if not correlation_chains:
     # Fallback to a simple alpha correlation if no config provided
     correlation_chains = [
