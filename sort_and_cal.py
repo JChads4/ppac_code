@@ -43,7 +43,7 @@ def process_file_wrapper(args):
     return summary
 
 
-from shrec_utils2 import (
+from shrec_utils import (
     mapimp, 
     mapboxE, 
     mapboxW, 
@@ -56,7 +56,7 @@ from shrec_utils2 import (
 )
 
 # Import sortcalSHREC without calling it directly - we'll use our own memory-safe version
-from shrec_utils2 import sortcalSHREC as original_sortcalSHREC
+from shrec_utils import sortcalSHREC as original_sortcalSHREC
 
 # Disable pandas warnings
 warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
