@@ -297,6 +297,15 @@ elapsed_time = time.time() - start_time
 print(f"Total processing time: {elapsed_time:.2f} seconds")
 print(f"Processing rate: {total_imp_events/elapsed_time:.1f} events/sec")
 
+if coincident_imp_df.empty:
+    print("No coincidences found - exiting early.")
+    out_dir = os.path.join("correlations", RUN_DIR)
+    os.makedirs(out_dir, exist_ok=True)
+    coincident_imp_df.to_pickle(os.path.join(out_dir, "coincident_imp.pkl"))
+    pd.DataFrame().to_pickle(os.path.join(out_dir, "decay_candidates.pkl"))
+    pd.DataFrame().to_pickle(os.path.join(out_dir, "final_correlated.pkl"))
+    sys.exit(0)
+
 # Free large objects that are no longer needed
 del dssd, ppac, ruth, cathode, anodeV, anodeH, imp
 gc.collect()
