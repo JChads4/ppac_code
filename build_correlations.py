@@ -295,6 +295,7 @@ coincident_imp_df['dt_cathode_us'] = coincident_imp_df['dt_cathode_ps'] * TO_US
 coincident_imp_df['dt_anodeV_us'] = coincident_imp_df['dt_anodeV_ps'] * TO_US
 coincident_imp_df['dt_anodeH_us'] = coincident_imp_df['dt_anodeH_ps'] * TO_US
 
+
 # Apply manual board offsets using vectorized mapping
 manual_offsets = {
     0: 0,
@@ -377,8 +378,6 @@ else:
 # Calculate log time difference between decay candidate and recoil event
 if not decay_candidates_df.empty:
     decay_candidates_df['log_dt'] = np.log(np.abs(decay_candidates_df['t'] - decay_candidates_df['recoil_time_sec']))
-
-# =============================================================================
 
 
 # =============================================================================
