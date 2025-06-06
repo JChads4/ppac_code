@@ -18,6 +18,7 @@ from time_units import TO_S, TO_US, TO_NS
 # file is ``correlation_config.yaml`` in the current directory.
 
 CONFIG_PATH = 'correlation_config.yaml'
+RUN_DIR = os.environ.get('RUN_DIR', 'r47_to_r58')
 
 def _to_float_if_str(value):
     """Convert numeric strings to floats, leaving other values unchanged."""
@@ -107,9 +108,9 @@ ruth_dtypes = {
 }
 
 # Read CSV files. (For very large files consider adding chunksize)
-dssd = pd.read_csv('processed_data/r47_to_r58/dssd_non_vetoed_events.csv', dtype=dssd_dtypes)
-ppac = pd.read_csv('processed_data/r47_to_r58/ppac_events.csv', dtype=ppac_dtypes)
-ruth = pd.read_csv('processed_data/r47_to_r58/rutherford_events.csv', dtype=ruth_dtypes)
+dssd = pd.read_csv(f'processed_data/{RUN_DIR}/dssd_non_vetoed_events.csv', dtype=dssd_dtypes)
+ppac = pd.read_csv(f'processed_data/{RUN_DIR}/ppac_events.csv', dtype=ppac_dtypes)
+ruth = pd.read_csv(f'processed_data/{RUN_DIR}/rutherford_events.csv', dtype=ruth_dtypes)
 
 # =============================================================================
 # 2. DATA SEGREGATION AND SORTING
@@ -466,7 +467,8 @@ else:
     final_correlated_df = pd.DataFrame()
 
 # Save results
-os.makedirs("correlations", exist_ok=True)
-coincident_imp_df.to_pickle("correlations/r47_to_r58/coincident_imp.pkl")
-decay_candidates_df.to_pickle("correlations/r47_to_r58/decay_candidates.pkl")
-final_correlated_df.to_pickle("correlations/r47_to_r58/final_correlated.pkl")
+out_dir = os.path.join("correlations", RUN_DIR)
+os.makedirs(out_dir, exist_ok=True)
+coincident_imp_df.to_pickle(os.path.join(out_dir, "coincident_imp.pkl"))
+decay_candidates_df.to_pickle(os.path.join(out_dir, "decay_candidates.pkl"))
+final_correlated_df.to_pickle(os.path.join(out_dir, "final_correlated.pkl"))
