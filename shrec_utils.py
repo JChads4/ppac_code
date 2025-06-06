@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+from time_units import TO_S
 
 def mapimp(dataframe, shrec_map):
     """
@@ -147,11 +148,11 @@ def sortcalSHREC(xdata, ydata, calibration_path, ecut=50):
         The cleaned and time-sorted DataFrame for this region.
     """
     # Time conversion using numpy array
-    xdata['t'] = np.array(xdata['timetag']*1e-12).round(6)
-    ydata['t'] = np.array(ydata['timetag']*1e-12).round(6)
-    
-    xdata['t2'] = np.array(xdata['timetag']*1e-12).round(5)
-    ydata['t2'] = np.array(ydata['timetag']*1e-12).round(5)
+    xdata['t'] = np.array(xdata['timetag'] * TO_S).round(6)
+    ydata['t'] = np.array(ydata['timetag'] * TO_S).round(6)
+
+    xdata['t2'] = np.array(xdata['timetag'] * TO_S).round(5)
+    ydata['t2'] = np.array(ydata['timetag'] * TO_S).round(5)
     
     # Load calibration file
     calfile = pd.read_csv(calibration_path, sep='\t')
@@ -283,7 +284,7 @@ def extract_ppac_data(raw_df):
         
         # Convert timetag to seconds
         if len(ppac_data) > 0:
-            ppac_data['t'] = np.round(ppac_data['timetag'] * 1e-12, 6)
+            ppac_data['t'] = np.round(ppac_data['timetag'] * TO_S, 6)
             
             # Sort by time
             ppac_data = ppac_data.sort_values(by='t').reset_index(drop=True)
@@ -315,7 +316,7 @@ def extract_rutherford_data(raw_df):
         
         # Convert timetag to seconds
         if len(ruth_data) > 0:
-            ruth_data['t'] = np.round(ruth_data['timetag'] * 1e-12, 6)
+            ruth_data['t'] = np.round(ruth_data['timetag'] * TO_S, 6)
             
             # Sort by time
             ruth_data = ruth_data.sort_values(by='t').reset_index(drop=True)
@@ -343,9 +344,9 @@ def detmerge(dssd_events, veto_events, time_window=400000e-12):
             
         # Convert timetags to time if not already done
         if 't' not in dssd_events.columns:
-            dssd_events['t'] = np.round(dssd_events['tagx'] * 1e-12, 6)
+            dssd_events['t'] = np.round(dssd_events['tagx'] * TO_S, 6)
         if 't' not in veto_events.columns:
-            veto_events['t'] = np.round(veto_events['tagx'] * 1e-12, 6)
+            veto_events['t'] = np.round(veto_events['tagx'] * TO_S, 6)
         
         # Create rounded time columns for merging
         dssd_events['t_round'] = np.round(dssd_events['t'], 5)
