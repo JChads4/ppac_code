@@ -104,3 +104,4 @@ data/
 # Experiment-specific (e.g., compiled analysis binaries, output directories)
 processed_data/
 analysis_output/
+correlations/

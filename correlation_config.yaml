@@ -1,9 +1,27 @@
 ppac_window:
   before_ns: 1700
   after_ns: 0
-  min_hits: 3
+  min_hits: 1
 
 chains:
+  - name: RA
+    steps:
+      - label: recoil
+        ppac_required: true
+        energy_min: 2000
+        energy_max: 8099
+      # - label: electron
+      #   ppac_required: false
+      #   energy_min: 50
+      #   energy_max: 700
+      #   corr_min: 1e-9
+      #   corr_max: 4
+      - label: alpha
+        ppac_required: false
+        energy_min: 8100
+        energy_max: 8400
+        corr_min: 0.08
+        corr_max: 10
   - name: REA
     steps:
       - label: recoil
@@ -22,3 +40,4 @@ chains:
         energy_max: 8400
         corr_min: 0.08
         corr_max: 10
+

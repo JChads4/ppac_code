@@ -730,7 +730,7 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
 def main():
     """Main function to process all files with memory optimization."""
     # Configuration variables
-    file_list_path = 'files_to_sort_long_run_4mbar_500V.txt'
+    file_list_path = 'files_to_sort.txt'
     data_folder = '../ppac_data/'
     shrec_map_path = os.path.join(data_folder, 'r238_shrec_map.xlsx')
     calibration_path = os.path.join(data_folder, 'r238_calibration_v0_copy-from-r237.txt')
@@ -896,92 +896,3 @@ if __name__ == "__main__":
         print(f"Critical error in main function: {str(e)}")
         # Clean exit without kernel kill
         sys.exit(1)
-
-# import multiprocessing as mp
-
-# # Add this wrapper function before main()
-# def process_file_wrapper(args):
-#     """Wrapper function to unpack arguments for process_file when using multiprocessing."""
-#     try:
-#         csv_file, output_paths, shrec_map_path, calibration_path, energy_cut, chunksize, max_memory_mb = args
-        
-#         # Call the existing process_file function with unpacked arguments
-#         return process_file(
-#             csv_file=csv_file,
-#             output_paths=output_paths,
-#             shrec_map_path=shrec_map_path,
-#             calibration_path=calibration_path,
-#             save_all_events=False,  # Default value
-#             ecut=energy_cut,
-#             chunksize=chunksize,
-#             max_memory_mb=max_memory_mb
-#         )
-#     except Exception as e:
-#         # Handle any exceptions in the child process
-#         import traceback
-#         return {
-#             'filename': os.path.basename(csv_file) if 'csv_file' in locals() else 'unknown',
-#             'error': str(e),
-#             'traceback': traceback.format_exc()
-#         }
-
-# def main():
-#     # Your existing configuration and output path setup
-#     file_list_path = 'files_to_sort.txt'
-#     data_folder = '../ppac_data/'
-#     shrec_map_path = os.path.join(data_folder, 'r238_shrec_map.xlsx')
-#     calibration_path = os.path.join(data_folder, 'r238_calibration_v0_copy-from-r237.txt')
-#     output_folder = 'processed_data/'
-#     energy_cut = 50
-#     chunksize = 5000  # Use a smaller chunk size for safer processing
-    
-#     # Memory limit settings (e.g., 60% of available system memory per process)
-#     total_memory, available_memory = get_system_memory()
-#     max_memory_mb = int(available_memory * 0.6)
-    
-#     # Ensure output directories exist
-#     os.makedirs(output_folder, exist_ok=True)
-#     os.makedirs(os.path.join(output_folder, 'temp'), exist_ok=True)
-    
-#     # Set up output paths and load file list
-#     output_paths = get_output_paths(output_folder)
-#     try:
-#         csv_files = load_file_list(file_list_path)
-#         log_message(f"Found {len(csv_files)} files to process", output_paths['log'])
-#     except Exception as e:
-#         log_message(f"Error loading file list: {str(e)}", output_paths['log'])
-#         return
-    
-#     # Create a list of arguments for each file
-#     tasks = [
-#         (csv_file, output_paths, shrec_map_path, calibration_path, energy_cut, chunksize, max_memory_mb)
-#         for csv_file in csv_files
-#     ]
-    
-#     # Use a multiprocessing Pool
-#     # To be extra cautious with memory, using processes=1 to run one file at a time
-#     log_message(f"Starting processing with multiprocessing (1 process at a time)", output_paths['log'])
-#     log_message(f"Memory limit per process: {max_memory_mb}MB", output_paths['log'])
-    
-#     with mp.Pool(processes=1) as pool:
-#         summaries = pool.map(process_file_wrapper, tasks)
-    
-#     # Process the collected summaries
-#     total_events = 0
-#     for summary in summaries:
-#         if 'error' in summary:
-#             log_message(f"Error processing {summary.get('filename', 'unknown')}: {summary['error']}", 
-#                        output_paths['log'])
-#         elif 'total_events' in summary:
-#             total_events += summary['total_events']
-    
-#     # Print final summary
-#     log_message("\nProcessing complete!", output_paths['log'])
-#     log_message(f"Total files processed: {len(csv_files)}", output_paths['log'])
-#     log_message(f"Total events processed: {total_events}", output_paths['log'])
-    
-# if __name__ == "__main__":
-#     # Force process to start fresh with released memory
-#     if mp.get_start_method(allow_none=True) != 'spawn':
-#         mp.set_start_method('spawn')
-#     main()

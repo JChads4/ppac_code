@@ -107,9 +107,9 @@ ruth_dtypes = {
 }
 
 # Read CSV files. (For very large files consider adding chunksize)
-dssd = pd.read_csv('processed_data/dssd_non_vetoed_events.csv', dtype=dssd_dtypes)
-ppac = pd.read_csv('processed_data/ppac_events.csv', dtype=ppac_dtypes)
-ruth = pd.read_csv('processed_data/rutherford_events.csv', dtype=ruth_dtypes)
+dssd = pd.read_csv('processed_data/r47_to_r58/dssd_non_vetoed_events.csv', dtype=dssd_dtypes)
+ppac = pd.read_csv('processed_data/r47_to_r58/ppac_events.csv', dtype=ppac_dtypes)
+ruth = pd.read_csv('processed_data/r47_to_r58/rutherford_events.csv', dtype=ruth_dtypes)
 
 # =============================================================================
 # 2. DATA SEGREGATION AND SORTING
@@ -466,7 +466,7 @@ else:
     final_correlated_df = pd.DataFrame()
 
 # Save results
-os.makedirs("analysis_output", exist_ok=True)
-coincident_imp_df.to_pickle("analysis_output/coincident_imp.pkl")
-decay_candidates_df.to_pickle("analysis_output/decay_candidates.pkl")
-final_correlated_df.to_pickle("analysis_output/final_correlated.pkl")
+os.makedirs("correlations", exist_ok=True)
+coincident_imp_df.to_pickle("correlations/r47_to_r58/coincident_imp.pkl")
+decay_candidates_df.to_pickle("correlations/r47_to_r58/decay_candidates.pkl")
+final_correlated_df.to_pickle("correlations/r47_to_r58/final_correlated.pkl")
