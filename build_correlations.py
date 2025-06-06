@@ -9,6 +9,7 @@ import time
 import gc
 import numba
 import scienceplots
+from time_units import TO_S, TO_US, TO_MIN, TO_NS
 
 plt.style.use('science')
 
@@ -112,7 +113,7 @@ anodeH_sorted = anodeH.sort_values('timetag').reset_index(drop=True)
 imp_sorted = imp.sort_values('tagx').reset_index(drop=True)
 
 # Create a column 't' (time in seconds) for the IMP events (needed for later decay analysis)
-imp_sorted['t'] = imp_sorted['tagx'] / 1e12  # converting picoseconds to seconds
+imp_sorted['t'] = imp_sorted['tagx'] * TO_S  # converting picoseconds to seconds
 
 
 # Cache timetag arrays for PPAC detectors for fast binary search
@@ -228,16 +229,16 @@ for idx, imp_row in imp_sorted.iterrows():
             'dt_cathode_ps': dt_cathode_ps,
             'dt_anodeV_ps': dt_anodeV_ps,
             'dt_anodeH_ps': dt_anodeH_ps,
-            'dt_cathode_ns': dt_cathode_ps / 1000,
-            'dt_anodeV_ns': dt_anodeV_ps / 1000,
-            'dt_anodeH_ns': dt_anodeH_ps / 1000,
+            'dt_cathode_ns': dt_cathode_ps * TO_NS,
+            'dt_anodeV_ns': dt_anodeV_ps * TO_NS,
+            'dt_anodeH_ns': dt_anodeH_ps * TO_NS,
         }
         coincident_events.append(event_data)
     else:
         # Record IMP events with no PPAC coincidences
         non_coincident_data = {
             'timetag': imp_timetag,
-            't': imp_timetag / 1e12,
+            't': imp_timetag * TO_S,
             'x': imp_row['x'],
             'y': imp_row['y'],
             'tagx': imp_row['tagx'],
@@ -277,9 +278,9 @@ gc.collect()
 # =============================================================================
 
 # Convert time differences from ps to µs for plotting convenience
-coincident_imp_df['dt_cathode_us'] = coincident_imp_df['dt_cathode_ps'] / 1000
-coincident_imp_df['dt_anodeV_us'] = coincident_imp_df['dt_anodeV_ps'] / 1000
-coincident_imp_df['dt_anodeH_us'] = coincident_imp_df['dt_anodeH_ps'] / 1000
+coincident_imp_df['dt_cathode_us'] = coincident_imp_df['dt_cathode_ps'] * TO_US
+coincident_imp_df['dt_anodeV_us'] = coincident_imp_df['dt_anodeV_ps'] * TO_US
+coincident_imp_df['dt_anodeH_us'] = coincident_imp_df['dt_anodeH_ps'] * TO_US
 
 # Plot raw E-ToF
 plt.figure(figsize=(8, 4))
@@ -331,7 +332,7 @@ decay_candidates = []  # List to store candidate decay events
 # Loop through each recoil (coincident IMP event)
 for recoil_idx, recoil in coincident_imp_df.iterrows():
     pixel = (recoil['imp_x'], recoil['imp_y'])
-    recoil_time_sec = recoil['imp_timetag'] / 1e12  # convert to seconds
+    recoil_time_sec = recoil['imp_timetag'] * TO_S  # convert to seconds
     if pixel not in pixel_history:
         continue  # No events for this pixel in history
     pixel_df = pixel_history[pixel]
@@ -407,7 +408,7 @@ filtered_alpha_candidates = decay_candidates_df[
 
 # Ensure there is a time column; it should already be there from imp_sorted grouping
 if 't' not in filtered_alpha_candidates.columns:
-    filtered_alpha_candidates['t'] = filtered_alpha_candidates['tagx'] / 1e12
+    filtered_alpha_candidates['t'] = filtered_alpha_candidates['tagx'] * TO_S
 
 # Initialize new columns for recoil correlation
 filtered_alpha_candidates['closest_recoil_index'] = np.nan
