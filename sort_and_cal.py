@@ -25,6 +25,7 @@ import tempfile
 import uuid
 import json
 import multiprocessing as mp
+from time_units import TO_S
 
 def process_file_wrapper(args):
     csv_file, output_paths, shrec_map_path, calibration_path, energy_cut, chunksize, max_memory_mb = args
@@ -254,12 +255,12 @@ def memory_safe_sortcalSHREC(xdata, ydata, calibration_path, ecut=50, max_memory
     calfile = pd.read_csv(calibration_path, sep='\t')
     
     # Convert timetags to time
-    xdata['t'] = np.round(xdata['timetag'] * 1e-12, 6)
-    ydata['t'] = np.round(ydata['timetag'] * 1e-12, 6)
+    xdata['t'] = np.round(xdata['timetag'] * TO_S, 6)
+    ydata['t'] = np.round(ydata['timetag'] * TO_S, 6)
     
     # Also prepare the t2 columns used in merging
-    xdata['t2'] = np.round(xdata['timetag'] * 1e-12, 5)
-    ydata['t2'] = np.round(ydata['timetag'] * 1e-12, 5)
+    xdata['t2'] = np.round(xdata['timetag'] * TO_S, 5)
+    ydata['t2'] = np.round(ydata['timetag'] * TO_S, 5)
     
     # Apply calibration to all data at once
     log_message(f"Applying calibration to X data...", include_memory=True)
