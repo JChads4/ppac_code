@@ -438,9 +438,16 @@ def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
     stage_df = recoils
     prev_label = first['label']
 
+    # Track which events from each dataset have been used so that the same decay
+    # event is not matched to multiple recoil chains.
+    used_recoil_idx = set()
+    used_decay_idx = set()
+
     for step in steps[1:]:
         label = step['label']
-        dataset = recoil_df if step.get('ppac_required') else decay_df
+        use_recoil = step.get('ppac_required')
+        dataset = recoil_df if use_recoil else decay_df
+        used_set = used_recoil_idx if use_recoil else used_decay_idx
         e_min = step.get('energy_min', 0)
         e_max = step.get('energy_max', np.inf)
         dt_min = step.get('corr_min', 0)
@@ -455,6 +462,10 @@ def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
                 pixel_events = dataset[(dataset['x'].between(px-1, px+1)) & (dataset['y'].between(py-1, py+1))]
             else:
                 raise ValueError(f"Unknown pixel_mode: {pixel_mode}")
+
+            # Exclude events that have already been paired with another recoil
+            pixel_events = pixel_events.loc[~pixel_events.index.isin(used_set)]
+
             after = pixel_events[pixel_events['t'] > row[f'{prev_label}_t']]
             energy_sel = after[(after['xE'] >= e_min) & (after['xE'] <= e_max)]
             if energy_sel.empty:
@@ -465,6 +476,7 @@ def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
             if window.empty:
                 continue
             evt = window.iloc[0]
+            used_set.add(evt.name)
             new_row = row.to_dict()
             new_row[f'{label}_x'] = evt['x']
             new_row[f'{label}_y'] = evt['y']
