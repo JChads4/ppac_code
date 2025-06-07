@@ -5,6 +5,7 @@ import numpy as np
 import yaml
 import time
 import gc
+import argparse
 from time_units import TO_S, TO_US, TO_NS
 
 
@@ -18,7 +19,15 @@ from time_units import TO_S, TO_US, TO_NS
 # file is ``correlation_config.yaml`` in the current directory.
 
 CONFIG_PATH = 'correlation_config.yaml'
-RUN_DIR = os.environ.get('RUN_DIR', 'long_run_4mbar_500V')
+
+parser = argparse.ArgumentParser(description="Build PPAC correlations")
+parser.add_argument('--run-dir', default=os.environ.get('RUN_DIR', 'long_run_4mbar_500V'),
+                    help='Name of run folder inside processed_data/')
+parser.add_argument('--base-dir', default='',
+                    help='Optional subdirectory under correlations/')
+args = parser.parse_args()
+
+RUN_DIR = args.run_dir
 
 def _to_float_if_str(value):
     """Convert numeric strings to floats, leaving other values unchanged."""
@@ -295,7 +304,7 @@ print(f"Processing rate: {total_imp_events/elapsed_time:.1f} events/sec")
 
 if coincident_imp_df.empty:
     print("No coincidences found - exiting early.")
-    out_dir = os.path.join("correlations", RUN_DIR)
+    out_dir = os.path.join("correlations", args.base_dir, RUN_DIR)
     os.makedirs(out_dir, exist_ok=True)
     coincident_imp_df.to_pickle(os.path.join(out_dir, "coincident_imp.pkl"))
     pd.DataFrame().to_pickle(os.path.join(out_dir, "decay_candidates.pkl"))
@@ -514,7 +523,7 @@ else:
     final_correlated_df = pd.DataFrame()
 
 # Save results
-out_dir = os.path.join("correlations", RUN_DIR)
+out_dir = os.path.join("correlations", args.base_dir, RUN_DIR)
 os.makedirs(out_dir, exist_ok=True)
 coincident_imp_df.to_pickle(os.path.join(out_dir, "coincident_imp.pkl"))
 decay_candidates_df.to_pickle(os.path.join(out_dir, "decay_candidates.pkl"))
