@@ -9,7 +9,7 @@ import pandas as pd
 def main():
     parser = argparse.ArgumentParser(description="Run build_correlations for runs in a list")
     parser.add_argument('--run-list', default='file_list_correlations.txt', help='Text file of run names')
-    parser.add_argument('--base-dir', default='long_run_4mbar_500V',
+    parser.add_argument('--base-dir', default='',
                         help='Directory used to store correlation outputs')
     args = parser.parse_args()
 
@@ -18,7 +18,9 @@ def main():
         env = os.environ.copy()
         env['RUN_DIR'] = run
         print(f"Processing run {run}...")
-        subprocess.run([sys.executable, 'build_correlations.py'], check=True, env=env)
+        subprocess.run([sys.executable, 'build_correlations.py',
+                        '--base-dir', args.base_dir],
+                       check=True, env=env)
 
     # Merge per-run pickle files into combined dataframes
     imp_dfs = []

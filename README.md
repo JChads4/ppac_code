@@ -41,14 +41,16 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
    Edit `correlation_config.yaml` to set PPAC coincidence windows and define correlation chains.
 
 4. **Build correlations**
-   
-   Run `python build_correlations.py` to create pickled correlation data. Set the
-   environment variable `RUN_DIR` to the run folder inside `processed_data/`
-   (e.g. `r47`). If unset, the script uses `long_run_4mbar_500V`.
+
+   Run `python build_correlations.py [--run-dir RUN] [--base-dir DIR]` to create
+   pickled correlation data. `--run-dir` defaults to the `RUN_DIR` environment
+   variable (falling back to `long_run_4mbar_500V` if unset). `--base-dir`
+   places the results under `correlations/<DIR>/`.
 
 5. **Batch processing** (optional)
-   
-   `python run_correlations_from_list.py --run-list file_list_correlations.txt` will run `build_correlations.py` for each entry and merge the results.
+
+   `python run_correlations_from_list.py --run-list file_list_correlations.txt [--base-dir DIR]`
+   will run `build_correlations.py` for each entry and merge the results.
 
 6. **Analyse**
    
@@ -57,7 +59,7 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
 ## Outputs
 
 - `processed_data/<run_id>/` – pickled detector data and logs from `sort_and_cal.py`
-- `correlations/<RUN_DIR>/` – `coincident_imp.pkl`, `decay_candidates.pkl`, `final_correlated.pkl` produced by `build_correlations.py`
+- `correlations/<base>/<run_id>/` – `coincident_imp.pkl`, `decay_candidates.pkl`, `final_correlated.pkl` produced by `build_correlations.py`
 
 ## Modifiable parameters
 
