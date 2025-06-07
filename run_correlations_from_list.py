@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import argparse
+import shutil
 from sort_and_cal import load_file_list
 import pandas as pd
 
@@ -43,6 +44,12 @@ def main():
         pd.concat(decay_dfs, ignore_index=True).to_pickle(os.path.join(out_dir, 'decay_candidates.pkl'))
     if corr_dfs:
         pd.concat(corr_dfs, ignore_index=True).to_pickle(os.path.join(out_dir, 'final_correlated.pkl'))
+
+    # Remove per-run outputs now that they are merged
+    for run in runs:
+        run_out = os.path.join('correlations', args.base_dir, run)
+        if os.path.isdir(run_out):
+            shutil.rmtree(run_out)
 
 
 if __name__ == '__main__':
