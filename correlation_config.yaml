@@ -3,6 +3,9 @@ ppac_window:
   after_ns: 0
   min_hits: 1
 
+# Pixel search mode for correlations: 'single' or 'square'
+pixel_search: single
+
 chains:
   - name: RA
     steps:

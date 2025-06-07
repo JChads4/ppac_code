@@ -40,6 +40,11 @@ window_before_ns = ppac_cfg.get('before_ns', 1700)
 window_after_ns = ppac_cfg.get('after_ns', 0)
 min_ppac_hits = ppac_cfg.get('min_hits', 3)
 
+# Pixel search mode for correlations
+pixel_search_mode = config.get('pixel_search', 'single')
+if pixel_search_mode not in ('single', 'square'):
+    raise ValueError("pixel_search must be 'single' or 'square'")
+
 correlation_chains = config.get('chains', [])
 for chain in correlation_chains:
     for step in chain.get('steps', []):
@@ -399,8 +404,20 @@ if not decay_candidates_df.empty:
 # 8. GENERIC CORRELATION BUILDING
 # =============================================================================
 
-def correlate_events(recoil_df, decay_df, chain):
-    """Build correlations for a single chain configuration."""
+def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
+    """Build correlations for a single chain configuration.
+
+    Parameters
+    ----------
+    recoil_df : pd.DataFrame
+        DataFrame containing recoil events.
+    decay_df : pd.DataFrame
+        DataFrame containing decay events.
+    chain : dict
+        Correlation chain definition from YAML.
+    pixel_mode : str, optional
+        Pixel search mode ('single' or 'square').
+    """
     steps = chain['steps']
     first = steps[0]
     recoils = recoil_df[(recoil_df['xE'] >= first.get('energy_min', 0)) &
@@ -421,8 +438,14 @@ def correlate_events(recoil_df, decay_df, chain):
         dt_max = step.get('corr_max', np.inf)
         results = []
         for _, row in stage_df.iterrows():
-            pix = (row[f'{prev_label}_x'], row[f'{prev_label}_y'])
-            pixel_events = dataset[(dataset['x'] == pix[0]) & (dataset['y'] == pix[1])]
+            px = row[f'{prev_label}_x']
+            py = row[f'{prev_label}_y']
+            if pixel_mode == 'single':
+                pixel_events = dataset[(dataset['x'] == px) & (dataset['y'] == py)]
+            elif pixel_mode == 'square':
+                pixel_events = dataset[(dataset['x'].between(px-1, px+1)) & (dataset['y'].between(py-1, py+1))]
+            else:
+                raise ValueError(f"Unknown pixel_mode: {pixel_mode}")
             after = pixel_events[pixel_events['t'] > row[f'{prev_label}_t']]
             energy_sel = after[(after['xE'] >= e_min) & (after['xE'] <= e_max)]
             if energy_sel.empty:
@@ -481,7 +504,7 @@ decay_df['t'] = decay_df['timetag'] * TO_S
 
 all_results = []
 for chain in correlation_chains:
-    res = correlate_events(recoil_df, decay_df, chain)
+    res = correlate_events(recoil_df, decay_df, chain, pixel_search_mode)
     if not res.empty:
         all_results.append(res)
 
