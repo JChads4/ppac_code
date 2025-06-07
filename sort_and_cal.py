@@ -388,6 +388,8 @@ def memory_safe_sortcalSHREC(xdata, ydata, calibration_path, ecut=50, max_memory
         # Filter on x/y differences
         temp3 = dfxy.loc[(dfxy['xdiff'] < 2) & (dfxy['ydiff'] < 2)]
         temp3.sort_values(by=['t','xstripE','ystripE'], ascending=[True,False,False], inplace=True)
+        # Keep the highest-energy combination for each timestamp
+        temp3.drop_duplicates(subset='t', keep='first', inplace=True)
         
         temp4 = temp3.drop(['xstripE','ystripE','xdiff','ydiff'], axis=1).reset_index(drop=True)
         

@@ -212,6 +212,8 @@ def sortcalSHREC(xdata, ydata, calibration_path, ecut=50):
     # Filter on x/y differences
     temp3 = dfxy.loc[(dfxy['xdiff'].values < 2) & (dfxy['ydiff'].values < 2)]
     temp3 = temp3.sort_values(by=['t', 'xstripE', 'ystripE'], ascending=[True, False, False])
+    # Keep the highest-energy combination for each timestamp
+    temp3 = temp3.drop_duplicates(subset='t', keep='first')
     
     # Drop unnecessary columns and reset index
     temp4 = temp3.drop(['xstripE', 'ystripE', 'xdiff', 'ydiff'], axis=1).reset_index(drop=True)
