@@ -26,6 +26,7 @@ import uuid
 import json
 import multiprocessing as mp
 from time_units import TO_S
+import re
 
 def process_file_wrapper(args):
     csv_file, output_paths, shrec_map_path, calibration_path, energy_cut, chunksize, max_memory_mb = args
@@ -160,17 +161,31 @@ def adjust_chunk_size(current_chunk_size, current_memory_mb, max_memory_mb, safe
     # Otherwise, keep current chunk size
     return current_chunk_size
 
-def get_output_paths(output_folder):
+def parse_run_id(csv_path):
+    """Return a short run identifier from a CSV filename."""
+    base = os.path.splitext(os.path.basename(csv_path))[0]
+    m = re.search(r"f(\d+)", base)
+    if m:
+        return f"r{int(m.group(1))}"
+    m = re.search(r"r(\d+)$", base)
+    if m:
+        return f"r{int(m.group(1))}"
+    return base
+
+
+def get_output_paths(output_folder, run_id=None):
     """Generate standard output file paths."""
+    if run_id:
+        output_folder = os.path.join(output_folder, run_id)
     os.makedirs(output_folder, exist_ok=True)
     os.makedirs(TEMP_FOLDER, exist_ok=True)
-    
+
     return {
-        'dssd_clean': os.path.join(output_folder, 'dssd_non_vetoed_events.csv'),
-        'ppac': os.path.join(output_folder, 'ppac_events.csv'),
-        'rutherford': os.path.join(output_folder, 'rutherford_events.csv'),
-        'all_events': os.path.join(output_folder, 'all_events_merged.csv'),
-        'summary': os.path.join(output_folder, 'processing_summary.csv'),
+        'dssd_clean': os.path.join(output_folder, 'dssd_non_vetoed_events.pkl'),
+        'ppac': os.path.join(output_folder, 'ppac_events.pkl'),
+        'rutherford': os.path.join(output_folder, 'rutherford_events.pkl'),
+        'all_events': os.path.join(output_folder, 'all_events_merged.pkl'),
+        'summary': os.path.join(output_folder, 'processing_summary.pkl'),
         'log': os.path.join(output_folder, 'processing_log.txt'),
         'temp': TEMP_FOLDER
     }
@@ -571,14 +586,15 @@ def extract_ancillary_data_chunked(csv_file, chunksize=50000, max_memory_mb=None
     
     return ppac_data, ruth_data
 
-def write_dataframe_to_csv(df, output_path, mode='w'):
-    """Write DataFrame to CSV with proper header handling."""
-    write_header = mode == 'w' or not os.path.exists(output_path)
-    
-    if len(df) > 0:
-        df.to_csv(output_path, mode=mode, header=write_header, index=False)
-        return len(df)
-    return 0
+def write_dataframe_to_pickle(df, output_path):
+    """Append DataFrame to a pickle file."""
+    if len(df) == 0:
+        return 0
+    if os.path.exists(output_path):
+        existing = pd.read_pickle(output_path)
+        df = pd.concat([existing, df], ignore_index=True)
+    df.to_pickle(output_path)
+    return len(df)
 
 def process_file(csv_file, output_paths, shrec_map_path, calibration_path, 
                 save_all_events=False, ecut=50, chunksize=50000, max_memory_mb=None):
@@ -654,8 +670,8 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
                     region_data['event_type'] = region
                     
                     # Append to all events file
-                    write_mode = 'a' if os.path.exists(output_paths['all_events']) else 'w'
-                    written = write_dataframe_to_csv(region_data, output_paths['all_events'], mode=write_mode)
+                    write_dataframe_to_pickle(region_data, output_paths['all_events'])
+                    written = len(region_data)
                     all_dssd_counts += written
                 
                 # Filter for clean events and save
@@ -665,8 +681,8 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
                     clean_events = clean_events.drop('is_vetoed', axis=1)
                     
                     # Append to clean events file
-                    write_mode = 'a' if os.path.exists(output_paths['dssd_clean']) else 'w'
-                    written = write_dataframe_to_csv(clean_events, output_paths['dssd_clean'], mode=write_mode)
+                    write_dataframe_to_pickle(clean_events, output_paths['dssd_clean'])
+                    written = len(clean_events)
                     clean_dssd_counts += written
                     
                     # Free memory
@@ -680,15 +696,13 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
         
         # 5. Save PPAC and Rutherford data
         if len(ppac_data) > 0:
-            write_mode = 'a' if os.path.exists(output_paths['ppac']) else 'w'
-            write_dataframe_to_csv(ppac_data, output_paths['ppac'], mode=write_mode)
+            write_dataframe_to_pickle(ppac_data, output_paths['ppac'])
             # Free memory immediately
             del ppac_data
             gc.collect()
-        
+
         if len(ruth_data) > 0:
-            write_mode = 'a' if os.path.exists(output_paths['rutherford']) else 'w'
-            write_dataframe_to_csv(ruth_data, output_paths['rutherford'], mode=write_mode)
+            write_dataframe_to_pickle(ruth_data, output_paths['rutherford'])
             # Free memory immediately
             del ruth_data
             gc.collect()
@@ -712,8 +726,7 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
         
         # 8. Append to summary file
         summary_df = pd.DataFrame([summary])
-        write_mode = 'a' if os.path.exists(output_paths['summary']) else 'w'
-        write_dataframe_to_csv(summary_df, output_paths['summary'], mode=write_mode)
+        write_dataframe_to_pickle(summary_df, output_paths['summary'])
         
         log_message(f"Processing complete for {csv_file}. Time: {t_end - t_start:.1f} seconds", 
                    output_paths['log'], include_memory=True)
@@ -747,36 +760,31 @@ def main():
     # Uncomment and set a specific value to override
     # max_memory_mb = 2000  # Limit to 2GB of RAM
     
-    # Set up output paths
-    output_paths = get_output_paths(output_folder)
-    
-    # Clear existing output files if requested
-    if clear_outputs:
-        for path in output_paths.values():
-            if path != output_paths['temp'] and os.path.exists(path):
-                os.remove(path)
-                log_message(f"Removed existing file: {path}")
-    
-    # Initialize log file
-    log_message(f"Starting ultra memory-optimized SHREC data processing", output_paths['log'], include_memory=True)
-    log_message(f"Initial memory usage: {get_memory_usage():.1f} MB", output_paths['log'])
-    log_message(f"Memory limit set to: {max_memory_mb:.1f} MB (of {total_memory:.1f} MB total system memory)", 
-              output_paths['log'])
+    log_message("Starting ultra memory-optimized SHREC data processing", print_to_console=True)
+    log_message(f"Initial memory usage: {get_memory_usage():.1f} MB")
+    log_message(f"Memory limit set to: {max_memory_mb:.1f} MB (of {total_memory:.1f} MB total system memory)")
     
     # Load list of files to process
     try:
         csv_files = load_file_list(file_list_path)
-        log_message(f"Found {len(csv_files)} files to process", output_paths['log'])
+        log_message(f"Found {len(csv_files)} files to process")
     except Exception as e:
-        log_message(f"Error loading file list: {str(e)}", output_paths['log'])
+        log_message(f"Error loading file list: {str(e)}")
         return
     
     # Process each file
     total_events = 0
-    
+
     for i, csv_file in enumerate(csv_files):
-        log_message(f"\nProcessing file {i+1}/{len(csv_files)}: {csv_file}", 
-                   output_paths['log'], include_memory=True)
+        run_id = parse_run_id(csv_file)
+        output_paths = get_output_paths(output_folder, run_id)
+
+        if clear_outputs:
+            for path in output_paths.values():
+                if path != output_paths['temp'] and os.path.exists(path):
+                    os.remove(path)
+
+        log_message(f"\nProcessing file {i+1}/{len(csv_files)}: {csv_file}", output_paths['log'], include_memory=True)
         
         try:
             # Force garbage collection before processing each file
@@ -863,20 +871,10 @@ def main():
         except Exception as e:
             log_message(f"Error processing file {csv_file}: {str(e)}", output_paths['log'])
     
-    # Print final summary
-    log_message("\nProcessing complete!", output_paths['log'])
-    log_message(f"Total files processed: {len(csv_files)}", output_paths['log'])
-    log_message(f"Total events processed: {total_events}", output_paths['log'])
-    log_message(f"Final memory usage: {get_memory_usage():.1f} MB", output_paths['log'])
-    
-    # Try to read file size information
-    for name, path in output_paths.items():
-        if name != 'log' and name != 'temp' and os.path.exists(path):
-            try:
-                file_size_mb = os.path.getsize(path) / (1024 * 1024)
-                log_message(f"{name} file size: {file_size_mb:.1f} MB", output_paths['log'])
-            except:
-                pass
+    log_message("\nProcessing complete!")
+    log_message(f"Total files processed: {len(csv_files)}")
+    log_message(f"Total events processed: {total_events}")
+    log_message(f"Final memory usage: {get_memory_usage():.1f} MB")
 
 if __name__ == "__main__":
     # Set up global exception handler to avoid crashes

@@ -112,10 +112,10 @@ ruth_dtypes = {
     'nfile': 'int16',
 }
 
-# Read CSV files. (For very large files consider adding chunksize)
-dssd = pd.read_csv(f'processed_data/{RUN_DIR}/dssd_non_vetoed_events.csv', dtype=dssd_dtypes)
-ppac = pd.read_csv(f'processed_data/{RUN_DIR}/ppac_events.csv', dtype=ppac_dtypes)
-ruth = pd.read_csv(f'processed_data/{RUN_DIR}/rutherford_events.csv', dtype=ruth_dtypes)
+# Read pickled files
+dssd = pd.read_pickle(f'processed_data/{RUN_DIR}/dssd_non_vetoed_events.pkl')
+ppac = pd.read_pickle(f'processed_data/{RUN_DIR}/ppac_events.pkl')
+ruth = pd.read_pickle(f'processed_data/{RUN_DIR}/rutherford_events.pkl')
 
 # =============================================================================
 # 2. DATA SEGREGATION AND SORTING
