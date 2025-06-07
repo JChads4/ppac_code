@@ -20,9 +20,10 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
    Create `files_to_sort.txt` containing paths to the raw CSV files to process.
 
 2. **Sort and calibrate**
-   
-   Run `python sort_and_cal.py` to produce calibrated CSVs in `processed_data/`.
-   The script options (lines 731‑748 of `sort_and_cal.py`) allow adjusting:
+
+   Run `python sort_and_cal.py` to create per-run pickle files under
+   `processed_data/<run_id>/`. The script options (around line 750 of
+   `sort_and_cal.py`) allow adjusting:
    - `file_list_path` – text file of input CSVs
    - `data_folder` – location of calibration files
    - `output_folder` – where processed files are written
@@ -32,7 +33,8 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
    - `chunksize` – number of rows read per batch
    - `max_memory_mb` – limit memory usage
 
-   Output files include `dssd_non_vetoed_events.csv`, `ppac_events.csv`, `rutherford_events.csv`, a merged event file and processing logs.
+   Output files include `dssd_non_vetoed_events.pkl`, `ppac_events.pkl`,
+   `rutherford_events.pkl`, a merged event pickle and processing logs.
 
 3. **Configure correlations**
    
@@ -40,7 +42,9 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
 
 4. **Build correlations**
    
-   Run `python build_correlations.py` to create pickled correlation data. Use the environment variable `RUN_DIR` if your processed data live in a different directory than the default `long_run_4mbar_500V`.
+   Run `python build_correlations.py` to create pickled correlation data. Set the
+   environment variable `RUN_DIR` to the run folder inside `processed_data/`
+   (e.g. `r47`). If unset, the script uses `long_run_4mbar_500V`.
 
 5. **Batch processing** (optional)
    
@@ -52,7 +56,7 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
 
 ## Outputs
 
-- `processed_data/` – calibrated CSVs and processing logs from `sort_and_cal.py`
+- `processed_data/<run_id>/` – pickled detector data and logs from `sort_and_cal.py`
 - `correlations/<RUN_DIR>/` – `coincident_imp.pkl`, `decay_candidates.pkl`, `final_correlated.pkl` produced by `build_correlations.py`
 
 ## Modifiable parameters
