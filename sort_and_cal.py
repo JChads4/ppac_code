@@ -743,7 +743,7 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
 def main():
     """Main function to process all files with memory optimization."""
     # Configuration variables
-    file_list_path = 'files_to_sort.txt'
+    file_list_path = 'sorting_lists/all_data.txt'
     data_folder = '../ppac_data/'
     shrec_map_path = os.path.join(data_folder, 'r238_shrec_map.xlsx')
     calibration_path = os.path.join(data_folder, 'r238_calibration_v0_copy-from-r237.txt')
@@ -756,7 +756,7 @@ def main():
     # Memory limit settings
     # By default, use 50% of available system memory to be ultra conservative
     total_memory, available_memory = get_system_memory()
-    max_memory_mb = int(available_memory * 0.5)  # Use only 50% of available memory
+    max_memory_mb = int(available_memory * 0.75)  # Use only 50% of available memory
     # Uncomment and set a specific value to override
     # max_memory_mb = 2000  # Limit to 2GB of RAM
     
