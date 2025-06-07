@@ -10,12 +10,6 @@ chains:
         ppac_required: true
         energy_min: 2000
         energy_max: 8099
-      # - label: electron
-      #   ppac_required: false
-      #   energy_min: 50
-      #   energy_max: 700
-      #   corr_min: 1e-9
-      #   corr_max: 4
       - label: alpha
         ppac_required: false
         energy_min: 8100
