@@ -384,4 +384,4 @@ def detmerge(dssd_events, veto_events, time_window=400000e-12):
         print(f"Error in detmerge: {str(e)}")
         # If error occurs, assume no vetoed events
         dssd_events['is_vetoed'] = False
-        return
+        return dssd_events
