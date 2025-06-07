@@ -50,7 +50,8 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
 5. **Batch processing** (optional)
 
    `python run_correlations_from_list.py --run-list file_list_correlations.txt [--base-dir DIR]`
-   will run `build_correlations.py` for each entry and merge the results.
+   will run `build_correlations.py` for each entry, merge the results and
+   remove the per-run output folders.
 
 6. **Analyse**
    
@@ -59,7 +60,7 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
 ## Outputs
 
 - `processed_data/<run_id>/` – pickled detector data and logs from `sort_and_cal.py`
-- `correlations/<base>/<run_id>/` – `coincident_imp.pkl`, `decay_candidates.pkl`, `final_correlated.pkl` produced by `build_correlations.py`
+- `correlations/<base>/` – merged `coincident_imp.pkl`, `decay_candidates.pkl` and `final_correlated.pkl` from `run_correlations_from_list.py`
 
 ## Modifiable parameters
 
