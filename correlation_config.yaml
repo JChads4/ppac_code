@@ -1,10 +1,9 @@
 ppac_window:
   before_ns: 1700
   after_ns: 0
-  min_hits: 3
+  min_hits: 1
 
-# Pixel search mode for correlations: 'single' or 'square'
-pixel_search: single
+pixel_search: square
 
 chains:
   - name: RA
@@ -13,7 +12,7 @@ chains:
         ppac_required: true
         energy_min: 2000
         energy_max: 8099
-      - label: alpha
+      - label: alpha1
         ppac_required: false
         energy_min: 8100
         energy_max: 8400
@@ -25,7 +24,7 @@ chains:
         ppac_required: true
         energy_min: 2000
         energy_max: 8099
-      - label: electron
+      - label: electron1
         ppac_required: false
         energy_min: 50
         energy_max: 700
@@ -37,7 +36,7 @@ chains:
         ppac_required: true
         energy_min: 2000
         energy_max: 8099
-      - label: electron
+      - label: electron1
         ppac_required: false
         energy_min: 50
         energy_max: 700
@@ -73,7 +72,7 @@ chains:
         ppac_required: true
         energy_min: 2000
         energy_max: 8099
-      - label: electron
+      - label: electron1
         ppac_required: false
         energy_min: 50
         energy_max: 700

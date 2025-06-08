@@ -758,7 +758,7 @@ def main():
     # Memory limit settings
     # By default, use 50% of available system memory to be ultra conservative
     total_memory, available_memory = get_system_memory()
-    max_memory_mb = int(available_memory * 0.5)  # Use only 50% of available memory
+    max_memory_mb = int(available_memory * 0.75)  # Use only 50% of available memory
     # Uncomment and set a specific value to override
     # max_memory_mb = 2000  # Limit to 2GB of RAM
     
