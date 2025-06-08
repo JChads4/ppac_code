@@ -27,6 +27,7 @@ import json
 import multiprocessing as mp
 from time_units import TO_S
 import re
+import shutil
 
 def process_file_wrapper(args):
     csv_file, output_paths, shrec_map_path, calibration_path, energy_cut, chunksize, max_memory_mb = args
@@ -417,19 +418,18 @@ def memory_safe_sortcalSHREC(xdata, ydata, calibration_path, ecut=50, max_memory
     
     log_message(f"Merging {len(temp_files)} chunk results", include_memory=True)
     
-    # Read all CSV files and combine them
-    dfs = []
-    for temp_file in temp_files:
-        df_chunk = pd.read_csv(temp_file)
-        dfs.append(df_chunk)
-        # Delete file after reading to free disk space
-        os.remove(temp_file)
-    
-    final_df = pd.concat(dfs, ignore_index=True)
+    # Read and combine chunk CSVs while removing them
+    def _read_chunks(files):
+        for f in files:
+            df_chunk = pd.read_csv(f)
+            os.remove(f)
+            yield df_chunk
+
+    final_df = pd.concat(_read_chunks(temp_files), ignore_index=True)
     final_df.sort_values(by='t', inplace=True, ignore_index=True)
-    
+
     # Clean up
-    os.rmdir(temp_dir)
+    shutil.rmtree(temp_dir)
     
     # Print duration info
     if len(final_df) > 0:
