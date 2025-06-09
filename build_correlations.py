@@ -435,7 +435,13 @@ max_corr_time = np.inf
 
 
 def build_results_for_chain(chain):
-    """Return correlated events for a single chain using chain-specific PPAC settings."""
+    """Return correlated events and intermediate DataFrames for a chain.
+
+    The returned tuple contains ``(correlated, coincident_imp_df,
+    decay_candidates_df)`` so that callers can persist the PPAC coincidence
+    information and decay candidates in addition to the final correlation
+    results.
+    """
 
     before_ns = chain['ppac_before_ns']
     after_ns = chain['ppac_after_ns']
@@ -471,7 +477,8 @@ def build_results_for_chain(chain):
 
     if coincident_imp_df.empty:
         print(f"No coincidences found for chain {chain.get('name', 'chain')}")
-        return pd.DataFrame()
+        decay_candidates_df = pd.DataFrame()
+        return pd.DataFrame(), coincident_imp_df, decay_candidates_df
 
     # Convert time differences from ps to µs and apply board offsets
     coincident_imp_df['dt_cathode_us'] = coincident_imp_df['dt_cathode_ps'] * TO_US
@@ -546,7 +553,7 @@ def build_results_for_chain(chain):
     recoil_df['t'] = recoil_df['timetag'] * TO_S
 
     res = correlate_events(recoil_df, decay_df, chain, pixel_search_mode)
-    return res
+    return res, coincident_imp_df, decay_candidates_df
 
 def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
     """Build correlations for a single chain configuration.
@@ -627,8 +634,13 @@ def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
     stage_df['chain'] = chain.get('name', 'chain')
     return stage_df
 
+saved_imp = None
+saved_decay = None
 for chain in correlation_chains:
-    res = build_results_for_chain(chain)
+    res, imp_df_chain, decay_df_chain = build_results_for_chain(chain)
+    if saved_imp is None:
+        saved_imp = imp_df_chain
+        saved_decay = decay_df_chain
     if not res.empty:
         all_results.append(res)
 
@@ -641,3 +653,9 @@ else:
 out_dir = os.path.join("correlations", args.base_dir, RUN_DIR)
 os.makedirs(out_dir, exist_ok=True)
 final_correlated_df.to_pickle(os.path.join(out_dir, "final_correlated.pkl"))
+if saved_imp is None:
+    saved_imp = pd.DataFrame()
+if saved_decay is None:
+    saved_decay = pd.DataFrame()
+saved_imp.to_pickle(os.path.join(out_dir, "coincident_imp.pkl"))
+saved_decay.to_pickle(os.path.join(out_dir, "decay_candidates.pkl"))
