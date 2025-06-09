@@ -1,62 +1,60 @@
 # Set `min_hits: 0` here or per-chain to disable PPAC coincidence requirements
 ppac_window:
-  before_ns: 1700
+  before_ns: 5000
   after_ns: 0
-  min_hits: 1
+  min_hits: 0
 
 pixel_search: square
 
 chains:
   - name: RA
-    ppac_window:
-      min_hits: 2
     steps:
       - label: recoil
         ppac_required: true
-        energy_min: 2000
-        energy_max: 8099
+        energy_min: 1e3
+        energy_max: 15e3
       - label: alpha1
         ppac_required: false
         energy_min: 8100
         energy_max: 8400
         corr_min: 0.01
         corr_max: 10
-  - name: RE
-    steps:
-      - label: recoil
-        ppac_required: true
-        energy_min: 2000
-        energy_max: 8099
-      - label: electron1
-        ppac_required: false
-        energy_min: 50
-        energy_max: 700
-        corr_min: 1e-6
-        corr_max: 10
-  - name: REA
-    steps:
-      - label: recoil
-        ppac_required: true
-        energy_min: 2000
-        energy_max: 8099
-      - label: electron1
-        ppac_required: false
-        energy_min: 50
-        energy_max: 700
-        corr_min: 1e-6
-        corr_max: 10
-      - label: alpha1
-        ppac_required: false
-        energy_min: 8100
-        energy_max: 8400
-        corr_min: 0.01
-        corr_max: 10
+  # - name: RE
+  #   steps:
+  #     - label: recoil
+  #       ppac_required: true
+  #       energy_min: 2000
+  #       energy_max: 8099
+  #     - label: electron1
+  #       ppac_required: false
+  #       energy_min: 50
+  #       energy_max: 700
+  #       corr_min: 1e-7
+  #       corr_max: 1
+  # - name: REA
+  #   steps:
+  #     - label: recoil
+  #       ppac_required: true
+  #       energy_min: 2000
+  #       energy_max: 8099
+  #     - label: electron1
+  #       ppac_required: false
+  #       energy_min: 50
+  #       energy_max: 700
+  #       corr_min: 1e-6
+  #       corr_max: 10
+  #     - label: alpha1
+  #       ppac_required: false
+  #       energy_min: 8100
+  #       energy_max: 8400
+  #       corr_min: 0.01
+  #       corr_max: 10
   - name: RAA
     steps:
       - label: recoil
         ppac_required: true
-        energy_min: 2000
-        energy_max: 8099
+        energy_min: 1e3
+        energy_max: 15e3
       - label: alpha1
         ppac_required: false
         energy_min: 8100
@@ -69,30 +67,30 @@ chains:
         energy_max: 7550
         corr_min: 1
         corr_max: 900
-  - name: REAA
-    steps:
-      - label: recoil
-        ppac_required: true
-        energy_min: 2000
-        energy_max: 8099
-      - label: electron1
-        ppac_required: false
-        energy_min: 50
-        energy_max: 700
-        corr_min: 1e-6
-        corr_max: 10
-      - label: alpha1
-        ppac_required: false
-        energy_min: 8100
-        energy_max: 8400
-        corr_min: 0.01
-        corr_max: 10
-      - label: alpha2
-        ppac_required: false
-        energy_min: 7250
-        energy_max: 7550
-        corr_min: 1
-        corr_max: 900
+  # - name: REAA
+  #   steps:
+  #     - label: recoil
+  #       ppac_required: true
+  #       energy_min: 2000
+  #       energy_max: 8099
+  #     - label: electron1
+  #       ppac_required: false
+  #       energy_min: 50
+  #       energy_max: 700
+  #       corr_min: 1e-6
+  #       corr_max: 10
+  #     - label: alpha1
+  #       ppac_required: false
+  #       energy_min: 8100
+  #       energy_max: 8400
+  #       corr_min: 0.01
+  #       corr_max: 10
+  #     - label: alpha2
+  #       ppac_required: false
+  #       energy_min: 7250
+  #       energy_max: 7550
+  #       corr_min: 1
+  #       corr_max: 900
 
 
 

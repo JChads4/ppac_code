@@ -741,7 +741,7 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
 def main():
     """Main function to process all files with memory optimization."""
     # Configuration variables
-    file_list_path = 'sorting_lists/files_to_sort.txt'
+    file_list_path = 'sorting_lists/no_ppac.txt'
     data_folder = '../ppac_data/'
     shrec_map_path = os.path.join(data_folder, 'r238_shrec_map.xlsx')
     calibration_path = os.path.join(data_folder, 'r238_calibration_v0_copy-from-r237.txt')
