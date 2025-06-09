@@ -16,6 +16,10 @@ import gc
 import numpy as np
 import pandas as pd
 import yaml
+import sys
+from contextlib import nullcontext
+
+from memory_utils import memory_limit, MemoryLimitExceeded
 
 from time_units import TO_S, TO_US, TO_NS
 
@@ -41,6 +45,8 @@ parser.add_argument('--run-dir', default=os.environ.get('RUN_DIR', 'long_run_4mb
                     help='Name of run folder inside processed_data/')
 parser.add_argument('--base-dir', default='',
                     help='Optional subdirectory under correlations/')
+parser.add_argument('--max-memory-mb', type=float, default=None,
+                    help='Optional maximum memory usage in MB')
 args = parser.parse_args()
 
 RUN_DIR = args.run_dir
@@ -237,42 +243,43 @@ ruth_dtypes = {
 # ---------------------------------------------------------------------------
 # 1. LOAD DATA
 # ---------------------------------------------------------------------------
-dssd, ppac, ruth = load_data(RUN_DIR)
 
-# =============================================================================
-# 2. DATA SEGREGATION AND SORTING
-# =============================================================================
+def main():
+    dssd, ppac, ruth = load_data(RUN_DIR)
 
-# Split DSSD data into regions
-regions = split_dssd_regions(dssd)
-imp = regions["imp"]
-boxE = regions["boxE"]
-boxW = regions["boxW"]
-boxT = regions["boxT"]
-boxB = regions["boxB"]
+    # ======================================================================
+    # 2. DATA SEGREGATION AND SORTING
+    # ======================================================================
+
+    # Split DSSD data into regions
+    regions = split_dssd_regions(dssd)
+    imp = regions["imp"]
+    boxE = regions["boxE"]
+    boxW = regions["boxW"]
+    boxT = regions["boxT"]
+    boxB = regions["boxB"]
 
 # Split PPAC data by detector type
-# Split PPAC data by detector type
-cathode, anodeV, anodeH = split_ppac_detectors(ppac)
+    # Split PPAC data by detector type
+    cathode, anodeV, anodeH = split_ppac_detectors(ppac)
 
-# Split Rutherford data
-ruth_E = ruth[ruth['detector'] == 'ruthE']
-ruth_W = ruth[ruth['detector'] == 'ruthW']
+    # Split Rutherford data
+    ruth_E = ruth[ruth['detector'] == 'ruthE']
+    ruth_W = ruth[ruth['detector'] == 'ruthW']
 
-# Prepare sorted PPAC data for fast time-window searches
-cathode_sorted = cathode
-anodeV_sorted = anodeV
-anodeH_sorted = anodeH
-imp_sorted = imp.sort_values('tagx').reset_index(drop=True)
+    # Prepare sorted PPAC data for fast time-window searches
+    cathode_sorted = cathode
+    anodeV_sorted = anodeV
+    anodeH_sorted = anodeH
+    imp_sorted = imp.sort_values('tagx').reset_index(drop=True)
 
-# Create a column 't' (time in seconds) for the IMP events (needed for later decay analysis)
-imp_sorted['t'] = imp_sorted['tagx'] * TO_S  # converting picoseconds to seconds
+    # Create a column 't' (time in seconds) for the IMP events (needed for later decay analysis)
+    imp_sorted['t'] = imp_sorted['tagx'] * TO_S  # converting picoseconds to seconds
 
-
-# Cache timetag arrays for PPAC detectors for fast binary search
-cathode_timetags = cathode_sorted['timetag'].values
-anodeV_timetags = anodeV_sorted['timetag'].values
-anodeH_timetags = anodeH_sorted['timetag'].values
+    # Cache timetag arrays for PPAC detectors for fast binary search
+    cathode_timetags = cathode_sorted['timetag'].values
+    anodeV_timetags = anodeV_sorted['timetag'].values
+    anodeH_timetags = anodeH_sorted['timetag'].values
 
 # =============================================================================
 # 3. DEFINE BINARY SEARCH FUNCTION FOR TIME WINDOWS
@@ -634,28 +641,39 @@ def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
     stage_df['chain'] = chain.get('name', 'chain')
     return stage_df
 
-saved_imp = None
-saved_decay = None
-for chain in correlation_chains:
-    res, imp_df_chain, decay_df_chain = build_results_for_chain(chain)
+    saved_imp = None
+    saved_decay = None
+    for chain in correlation_chains:
+        res, imp_df_chain, decay_df_chain = build_results_for_chain(chain)
+        if saved_imp is None:
+            saved_imp = imp_df_chain
+            saved_decay = decay_df_chain
+        if not res.empty:
+            all_results.append(res)
+
+    if all_results:
+        final_correlated_df = pd.concat(all_results, ignore_index=True)
+    else:
+        final_correlated_df = pd.DataFrame()
+
+    # Save results
+    out_dir = os.path.join("correlations", args.base_dir, RUN_DIR)
+    os.makedirs(out_dir, exist_ok=True)
+    final_correlated_df.to_pickle(os.path.join(out_dir, "final_correlated.pkl"))
     if saved_imp is None:
-        saved_imp = imp_df_chain
-        saved_decay = decay_df_chain
-    if not res.empty:
-        all_results.append(res)
+        saved_imp = pd.DataFrame()
+    if saved_decay is None:
+        saved_decay = pd.DataFrame()
+    saved_imp.to_pickle(os.path.join(out_dir, "coincident_imp.pkl"))
+    saved_decay.to_pickle(os.path.join(out_dir, "decay_candidates.pkl"))
 
-if all_results:
-    final_correlated_df = pd.concat(all_results, ignore_index=True)
-else:
-    final_correlated_df = pd.DataFrame()
 
-# Save results
-out_dir = os.path.join("correlations", args.base_dir, RUN_DIR)
-os.makedirs(out_dir, exist_ok=True)
-final_correlated_df.to_pickle(os.path.join(out_dir, "final_correlated.pkl"))
-if saved_imp is None:
-    saved_imp = pd.DataFrame()
-if saved_decay is None:
-    saved_decay = pd.DataFrame()
-saved_imp.to_pickle(os.path.join(out_dir, "coincident_imp.pkl"))
-saved_decay.to_pickle(os.path.join(out_dir, "decay_candidates.pkl"))
+if __name__ == "__main__":
+    ctx = memory_limit(args.max_memory_mb) if args.max_memory_mb else nullcontext()
+    try:
+        with ctx:
+            main()
+    except MemoryLimitExceeded as e:
+        print(f"Memory limit exceeded: {e}")
+        sys.exit(1)
+

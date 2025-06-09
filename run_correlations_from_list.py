@@ -12,6 +12,8 @@ def main():
     parser.add_argument('--run-list', default='file_list_correlations.txt', help='Text file of run names')
     parser.add_argument('--base-dir', default='',
                         help='Directory used to store correlation outputs')
+    parser.add_argument('--max-memory-mb', type=float, default=None,
+                        help='Optional memory limit in MB for each subprocess')
     args = parser.parse_args()
 
     runs = load_file_list(args.run_list)
@@ -19,9 +21,11 @@ def main():
         env = os.environ.copy()
         env['RUN_DIR'] = run
         print(f"Processing run {run}...")
-        subprocess.run([sys.executable, 'build_correlations.py',
-                        '--base-dir', args.base_dir],
-                       check=True, env=env)
+        cmd = [sys.executable, 'build_correlations.py',
+               '--base-dir', args.base_dir]
+        if args.max_memory_mb is not None:
+            cmd += ['--max-memory-mb', str(args.max_memory_mb)]
+        subprocess.run(cmd, check=True, env=env)
 
     # Merge per-run pickle files into combined dataframes
     imp_dfs = []
