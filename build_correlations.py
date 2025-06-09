@@ -1,11 +1,23 @@
 import sys
-import pandas as pd
+"""Build PPAC correlation chains from processed detector data.
+
+This script loads per-run pickle files, searches for PPAC coincidences with
+implantation (IMP) events and then constructs decay correlation chains as
+defined in ``correlation_config.yaml``.  Results are stored under
+``correlations/<base-dir>/<run>``.
+
+The implementation has been modularised so that the data loading, coincidence
+search and correlation building steps can be reused elsewhere.
+"""
+
+import argparse
 import os
-import numpy as np
-import yaml
 import time
 import gc
-import argparse
+import numpy as np
+import pandas as pd
+import yaml
+
 from time_units import TO_S, TO_US, TO_NS
 
 
@@ -28,6 +40,47 @@ parser.add_argument('--base-dir', default='',
 args = parser.parse_args()
 
 RUN_DIR = args.run_dir
+
+
+def load_data(run_dir):
+    """Return DSSD, PPAC and Rutherford DataFrames for *run_dir*."""
+    dssd = pd.read_pickle(f"processed_data/{run_dir}/dssd_non_vetoed_events.pkl")
+    ppac = pd.read_pickle(f"processed_data/{run_dir}/ppac_events.pkl")
+    ruth = pd.read_pickle(f"processed_data/{run_dir}/rutherford_events.pkl")
+    return dssd, ppac, ruth
+
+
+def split_dssd_regions(dssd):
+    """Split DSSD events into detector regions."""
+    regions = {}
+    for region in ["imp", "boxE", "boxW", "boxT", "boxB"]:
+        regions[region] = dssd[dssd["event_type"] == region].copy()
+    return regions
+
+
+def split_ppac_detectors(ppac):
+    """Return cathode, anodeV and anodeH DataFrames sorted by time."""
+    cathode = ppac[ppac["detector"] == "cathode"].sort_values("timetag").reset_index(
+        drop=True
+    )
+    anodeV = ppac[ppac["detector"] == "anodeV"].sort_values("timetag").reset_index(
+        drop=True
+    )
+    anodeH = ppac[ppac["detector"] == "anodeH"].sort_values("timetag").reset_index(
+        drop=True
+    )
+    return cathode, anodeV, anodeH
+
+
+def prepare_decay_df(non_coincident_imp_df, box_regions):
+    """Create the decay DataFrame from IMP and box-region events."""
+    frames = [non_coincident_imp_df[["x", "y", "xE", "timetag"]].copy()]
+    for df in box_regions.values():
+        tmp = df[["x", "y", "xE", "tagx"]].rename(columns={"tagx": "timetag"})
+        frames.append(tmp)
+    decay = pd.concat(frames, ignore_index=True)
+    decay["t"] = decay["timetag"] * TO_S
+    return decay
 
 def _to_float_if_str(value):
     """Convert numeric strings to floats, leaving other values unchanged."""
@@ -121,37 +174,37 @@ ruth_dtypes = {
     'nfile': 'int16',
 }
 
-# Read pickled files
-dssd = pd.read_pickle(f'processed_data/{RUN_DIR}/dssd_non_vetoed_events.pkl')
-ppac = pd.read_pickle(f'processed_data/{RUN_DIR}/ppac_events.pkl')
-ruth = pd.read_pickle(f'processed_data/{RUN_DIR}/rutherford_events.pkl')
+# ---------------------------------------------------------------------------
+# 1. LOAD DATA
+# ---------------------------------------------------------------------------
+dssd, ppac, ruth = load_data(RUN_DIR)
 
 # =============================================================================
 # 2. DATA SEGREGATION AND SORTING
 # =============================================================================
 
 # Split DSSD data into regions
-imp = dssd[dssd['event_type'] == 'imp']
-boxE = dssd[dssd['event_type'] == 'boxE']
-boxW = dssd[dssd['event_type'] == 'boxW']
-boxT = dssd[dssd['event_type'] == 'boxT']
-boxB = dssd[dssd['event_type'] == 'boxB']
+regions = split_dssd_regions(dssd)
+imp = regions["imp"]
+boxE = regions["boxE"]
+boxW = regions["boxW"]
+boxT = regions["boxT"]
+boxB = regions["boxB"]
 
 # Split PPAC data by detector type
-cathode = ppac[ppac['detector'] == 'cathode']
-anodeV = ppac[ppac['detector'] == 'anodeV']
-anodeH = ppac[ppac['detector'] == 'anodeH']
+# Split PPAC data by detector type
+cathode, anodeV, anodeH = split_ppac_detectors(ppac)
 
 # Split Rutherford data
 ruth_E = ruth[ruth['detector'] == 'ruthE']
 ruth_W = ruth[ruth['detector'] == 'ruthW']
 
 # Define the coincidence window (in ns) and convert to ps
-window_before_ps=window_before_ns*1000
-window_after_ps=window_after_ns*1000
-cathode_sorted = cathode.sort_values('timetag').reset_index(drop=True)
-anodeV_sorted = anodeV.sort_values('timetag').reset_index(drop=True)
-anodeH_sorted = anodeH.sort_values('timetag').reset_index(drop=True)
+window_before_ps = window_before_ns * 1000
+window_after_ps = window_after_ns * 1000
+cathode_sorted = cathode
+anodeV_sorted = anodeV
+anodeH_sorted = anodeH
 imp_sorted = imp.sort_values('tagx').reset_index(drop=True)
 
 # Create a column 't' (time in seconds) for the IMP events (needed for later decay analysis)
@@ -188,119 +241,131 @@ def find_events_in_window(imp_timetag, detector_timetags, window_before_ps, wind
         return list(range(lower_idx, upper_idx))
     return []
 
-# =============================================================================
-# 4. COINCIDENCE SEARCH BETWEEN IMP AND PPAC EVENTS
-# =============================================================================
+# ---------------------------------------------------------------------------
+# 2. COINCIDENCE SEARCH BETWEEN IMP AND PPAC EVENTS
+# ---------------------------------------------------------------------------
 
-start_time = time.time()
-coincident_events = []
-non_ppac_coincident_events = []
-total_imp_events = len(imp_sorted)
-print(f"Processing {total_imp_events} IMP events...")
+def find_ppac_coincidences():
+    """Return coincidence and non-coincidence DataFrames for the IMP region."""
+    start_time = time.time()
+    coincident = []
+    non_coincident = []
+    total_imp_events = len(imp_sorted)
+    print(f"Processing {total_imp_events} IMP events...")
 
-for idx, imp_row in imp_sorted.iterrows():
-    imp_timetag = imp_row['tagx']  # using tagx as the IMP time
-    # Find PPAC events within the specified time window
-    cathode_indices = find_events_in_window(imp_timetag, cathode_timetags, window_before_ps, window_after_ps)
-    anodeV_indices = find_events_in_window(imp_timetag, anodeV_timetags, window_before_ps, window_after_ps)
-    anodeH_indices = find_events_in_window(imp_timetag, anodeH_timetags, window_before_ps, window_after_ps)
+    for idx, imp_row in imp_sorted.iterrows():
+        imp_timetag = imp_row["tagx"]
 
-    hits_found = int(bool(cathode_indices)) + int(bool(anodeV_indices)) + int(bool(anodeH_indices))
+        cathode_idx = find_events_in_window(
+            imp_timetag, cathode_timetags, window_before_ps, window_after_ps
+        )
+        anodeV_idx = find_events_in_window(
+            imp_timetag, anodeV_timetags, window_before_ps, window_after_ps
+        )
+        anodeH_idx = find_events_in_window(
+            imp_timetag, anodeH_timetags, window_before_ps, window_after_ps
+        )
 
-    if hits_found >= min_ppac_hits:
-        # Find the closest PPAC event for each detector when available
-        if cathode_indices:
-            cathode_diffs = np.abs(cathode_timetags[cathode_indices] - imp_timetag)
-            closest_cathode_idx = cathode_indices[np.argmin(cathode_diffs)]
-            cathode_data = cathode_sorted.iloc[closest_cathode_idx]
-            dt_cathode_ps = cathode_data['timetag'] - imp_timetag
+        hits = int(bool(cathode_idx)) + int(bool(anodeV_idx)) + int(bool(anodeH_idx))
+
+        if hits >= min_ppac_hits:
+            if cathode_idx:
+                diffs = np.abs(cathode_timetags[cathode_idx] - imp_timetag)
+                closest = cathode_idx[np.argmin(diffs)]
+                cathode_data = cathode_sorted.iloc[closest]
+                dt_cathode_ps = cathode_data["timetag"] - imp_timetag
+            else:
+                cathode_data = {k: np.nan for k in ["timetag", "energy", "board", "channel", "nfile"]}
+                dt_cathode_ps = np.nan
+
+            if anodeV_idx:
+                diffs = np.abs(anodeV_timetags[anodeV_idx] - imp_timetag)
+                closest = anodeV_idx[np.argmin(diffs)]
+                anodeV_data = anodeV_sorted.iloc[closest]
+                dt_anodeV_ps = anodeV_data["timetag"] - imp_timetag
+            else:
+                anodeV_data = {k: np.nan for k in ["timetag", "energy", "board", "channel", "nfile"]}
+                dt_anodeV_ps = np.nan
+
+            if anodeH_idx:
+                diffs = np.abs(anodeH_timetags[anodeH_idx] - imp_timetag)
+                closest = anodeH_idx[np.argmin(diffs)]
+                anodeH_data = anodeH_sorted.iloc[closest]
+                dt_anodeH_ps = anodeH_data["timetag"] - imp_timetag
+            else:
+                anodeH_data = {k: np.nan for k in ["timetag", "energy", "board", "channel", "nfile"]}
+                dt_anodeH_ps = np.nan
+
+            coincident.append(
+                {
+                    "imp_timetag": imp_timetag,
+                    "imp_x": imp_row["x"],
+                    "imp_y": imp_row["y"],
+                    "imp_tagx": imp_row["tagx"],
+                    "imp_tagy": imp_row["tagy"],
+                    "imp_nfile": imp_row["nfile"],
+                    "imp_tdelta": imp_row["tdelta"],
+                    "imp_nX": imp_row["nX"],
+                    "imp_nY": imp_row["nY"],
+                    "imp_xE": imp_row["xE"],
+                    "imp_yE": imp_row["yE"],
+                    "xboard": imp_row["xboard"],
+                    "yboard": imp_row["yboard"],
+                    "cathode_timetag": cathode_data.get("timetag"),
+                    "cathode_energy": cathode_data.get("energy"),
+                    "anodeV_timetag": anodeV_data.get("timetag"),
+                    "anodeV_energy": anodeV_data.get("energy"),
+                    "anodeH_timetag": anodeH_data.get("timetag"),
+                    "anodeH_energy": anodeH_data.get("energy"),
+                    "dt_cathode_ps": dt_cathode_ps,
+                    "dt_anodeV_ps": dt_anodeV_ps,
+                    "dt_anodeH_ps": dt_anodeH_ps,
+                    "dt_cathode_ns": dt_cathode_ps * TO_NS,
+                    "dt_anodeV_ns": dt_anodeV_ps * TO_NS,
+                    "dt_anodeH_ns": dt_anodeH_ps * TO_NS,
+                }
+            )
         else:
-            cathode_data = {k: np.nan for k in ['timetag','energy','board','channel','nfile']}
-            dt_cathode_ps = np.nan
+            non_coincident.append(
+                {
+                    "timetag": imp_timetag,
+                    "t": imp_timetag * TO_S,
+                    "x": imp_row["x"],
+                    "y": imp_row["y"],
+                    "tagx": imp_row["tagx"],
+                    "tagy": imp_row["tagy"],
+                    "nfile": imp_row["nfile"],
+                    "tdelta": imp_row["tdelta"],
+                    "nX": imp_row["nX"],
+                    "nY": imp_row["nY"],
+                    "xE": imp_row["xE"],
+                    "yE": imp_row["yE"],
+                    "xboard": imp_row["xboard"],
+                    "yboard": imp_row["yboard"],
+                }
+            )
 
-        if anodeV_indices:
-            anodeV_diffs = np.abs(anodeV_timetags[anodeV_indices] - imp_timetag)
-            closest_anodeV_idx = anodeV_indices[np.argmin(anodeV_diffs)]
-            anodeV_data = anodeV_sorted.iloc[closest_anodeV_idx]
-            dt_anodeV_ps = anodeV_data['timetag'] - imp_timetag
-        else:
-            anodeV_data = {k: np.nan for k in ['timetag','energy','board','channel','nfile']}
-            dt_anodeV_ps = np.nan
+        if idx % 10000 == 0 and idx > 0:
+            elapsed = time.time() - start_time
+            rate = idx / elapsed
+            remaining = (total_imp_events - idx) / rate
+            print(
+                f"Processed {idx}/{total_imp_events} events ({idx/total_imp_events:.1%}) - ETA: {remaining:.1f} sec"
+            )
 
-        if anodeH_indices:
-            anodeH_diffs = np.abs(anodeH_timetags[anodeH_indices] - imp_timetag)
-            closest_anodeH_idx = anodeH_indices[np.argmin(anodeH_diffs)]
-            anodeH_data = anodeH_sorted.iloc[closest_anodeH_idx]
-            dt_anodeH_ps = anodeH_data['timetag'] - imp_timetag
-        else:
-            anodeH_data = {k: np.nan for k in ['timetag','energy','board','channel','nfile']}
-            dt_anodeH_ps = np.nan
-        
-        event_data = {
-            # IMP data
-            'imp_timetag': imp_timetag,
-            'imp_x': imp_row['x'],
-            'imp_y': imp_row['y'],
-            'imp_tagx': imp_row['tagx'],
-            'imp_tagy': imp_row['tagy'],
-            'imp_nfile': imp_row['nfile'],
-            'imp_tdelta': imp_row['tdelta'],
-            'imp_nX': imp_row['nX'],
-            'imp_nY': imp_row['nY'],
-            'imp_xE': imp_row['xE'],
-            'imp_yE': imp_row['yE'],
-            'xboard': imp_row['xboard'],
-            'yboard': imp_row['yboard'],
-            # PPAC data (only timetag and energy)
-            'cathode_timetag': cathode_data.get('timetag'),
-            'cathode_energy': cathode_data.get('energy'),
-            'anodeV_timetag': anodeV_data.get('timetag'),
-            'anodeV_energy': anodeV_data.get('energy'),
-            'anodeH_timetag': anodeH_data.get('timetag'),
-            'anodeH_energy': anodeH_data.get('energy'),
-            # Time differences
-            'dt_cathode_ps': dt_cathode_ps,
-            'dt_anodeV_ps': dt_anodeV_ps,
-            'dt_anodeH_ps': dt_anodeH_ps,
-            'dt_cathode_ns': dt_cathode_ps * TO_NS,
-            'dt_anodeV_ns': dt_anodeV_ps * TO_NS,
-            'dt_anodeH_ns': dt_anodeH_ps * TO_NS,
-        }
-        coincident_events.append(event_data)
-    else:
-        # Record IMP events with no PPAC coincidences
-        non_coincident_data = {
-            'timetag': imp_timetag,
-            't': imp_timetag * TO_S,
-            'x': imp_row['x'],
-            'y': imp_row['y'],
-            'tagx': imp_row['tagx'],
-            'tagy': imp_row['tagy'],
-            'nfile': imp_row['nfile'],
-            'tdelta': imp_row['tdelta'],
-            'nX': imp_row['nX'],
-            'nY': imp_row['nY'],
-            'xE': imp_row['xE'],
-            'yE': imp_row['yE'],
-            'xboard': imp_row['xboard'],
-            'yboard': imp_row['yboard'],
-        }
-        non_ppac_coincident_events.append(non_coincident_data)
-    
-    # Print progress every 10,000 events
-    if idx % 10000 == 0 and idx > 0:
-        elapsed = time.time() - start_time
-        events_per_sec = idx / elapsed
-        remaining_time = (total_imp_events - idx) / events_per_sec 
-        print(f"Processed {idx}/{total_imp_events} events ({idx/total_imp_events:.1%}) - ETA: {remaining_time:.1f} sec")
+    coincident_df = pd.DataFrame(coincident)
+    non_coincident_df = pd.DataFrame(non_coincident)
 
-# Create DataFrames from the coincidence lists
-coincident_imp_df = pd.DataFrame(coincident_events)
-non_coincident_imp_df = pd.DataFrame(non_ppac_coincident_events)
-print(f"Found {len(coincident_imp_df)} coincidences within the window")
-elapsed_time = time.time() - start_time
-print(f"Total processing time: {elapsed_time:.2f} seconds")
-print(f"Processing rate: {total_imp_events/elapsed_time:.1f} events/sec")
+    print(f"Found {len(coincident_df)} coincidences within the window")
+    elapsed_time = time.time() - start_time
+    print(f"Total processing time: {elapsed_time:.2f} seconds")
+    if elapsed_time:
+        print(f"Processing rate: {total_imp_events/elapsed_time:.1f} events/sec")
+
+    return coincident_df, non_coincident_df
+
+
+coincident_imp_df, non_coincident_imp_df = find_ppac_coincidences()
 
 if coincident_imp_df.empty:
     print("No coincidences found - exiting early.")
@@ -312,7 +377,7 @@ if coincident_imp_df.empty:
     sys.exit(0)
 
 # Free large objects that are no longer needed
-del dssd, ppac, ruth, cathode, anodeV, anodeH, imp
+del dssd, ppac, ruth, cathode, anodeV, anodeH, imp, boxE, boxW, boxT, boxB
 gc.collect()
 
 # =============================================================================
@@ -348,10 +413,11 @@ coincident_imp_df['dt_cathode_us_corr'] = (coincident_imp_df['dt_cathode_us'] +
 # 6. DECAY EVENT CANDIDATE IDENTIFICATION
 # =============================================================================
 
-# Build pixel history from the IMP events (using imp_sorted that we prepared earlier)
-# Group by pixel (x, y) and ensure each group is sorted by time 't'
-pixel_groups = imp_sorted.groupby(['x', 'y'])
-pixel_history = {pixel: group.sort_values('t') for pixel, group in pixel_groups}
+# Build pixel history from all DSSD regions so escaping particles are included
+all_events = pd.concat([imp, boxE, boxW, boxT, boxB], ignore_index=True)
+all_events['t'] = all_events['tagx'] * TO_S
+pixel_groups = all_events.groupby(['x', 'y'])
+pixel_history = {pix: grp.sort_values('t') for pix, grp in pixel_groups}
 
 # Define decay time window (in seconds)
 min_corr_time = 1e-8  # Minimum time after recoil to consider (10 ns)
@@ -419,13 +485,14 @@ def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
     Parameters
     ----------
     recoil_df : pd.DataFrame
-        DataFrame containing recoil events.
+        Must contain columns ``x``, ``y``, ``xE`` and ``t``.
     decay_df : pd.DataFrame
-        DataFrame containing decay events.
+        Decay-like events with the same columns as ``recoil_df``.
     chain : dict
-        Correlation chain definition from YAML.
-    pixel_mode : str, optional
-        Pixel search mode ('single' or 'square').
+        Correlation chain definition from ``correlation_config.yaml``.
+    pixel_mode : {'single', 'square'}, optional
+        Pixel search mode specifying whether only the recoil pixel or the
+        surrounding square is searched.
     """
     steps = chain['steps']
     first = steps[0]
@@ -520,8 +587,8 @@ recoil_df.rename(
 )
 recoil_df['t'] = recoil_df['timetag'] * TO_S
 
-decay_df = non_coincident_imp_df[['x', 'y', 'xE', 'timetag']].copy()
-decay_df['t'] = decay_df['timetag'] * TO_S
+box_regions = {"boxE": boxE, "boxW": boxW, "boxT": boxT, "boxB": boxB}
+decay_df = prepare_decay_df(non_coincident_imp_df, box_regions)
 
 all_results = []
 for chain in correlation_chains:
