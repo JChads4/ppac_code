@@ -459,6 +459,16 @@ def build_results_for_chain(chain):
         coincident_imp_df = hits_df[hits_in_window >= min_hits_chain].copy()
         non_coincident_imp_df = hits_df[hits_in_window < min_hits_chain].copy()
 
+    # Use generic column names throughout
+    rename_cols = {
+        'imp_x': 'x',
+        'imp_y': 'y',
+        'imp_xE': 'xE',
+        'imp_timetag': 'timetag',
+    }
+    coincident_imp_df = coincident_imp_df.rename(columns=rename_cols)
+    non_coincident_imp_df = non_coincident_imp_df.rename(columns=rename_cols)
+
     if coincident_imp_df.empty:
         print(f"No coincidences found for chain {chain.get('name', 'chain')}")
         return pd.DataFrame()
@@ -480,8 +490,8 @@ def build_results_for_chain(chain):
     # Build decay candidates for this chain
     decay_candidates = []
     for recoil_idx, recoil in coincident_imp_df.iterrows():
-        pixel = (recoil['imp_x'], recoil['imp_y'])
-        recoil_time_sec = recoil['imp_timetag'] * TO_S
+        pixel = (recoil['x'], recoil['y'])
+        recoil_time_sec = recoil['timetag'] * TO_S
         if pixel not in pixel_history:
             continue
         pixel_df = pixel_history[pixel]
@@ -521,10 +531,10 @@ def build_results_for_chain(chain):
 
     recoil_df = coincident_imp_df[
         [
-            'imp_x',
-            'imp_y',
-            'imp_xE',
-            'imp_timetag',
+            'x',
+            'y',
+            'xE',
+            'timetag',
             'cathode_timetag',
             'cathode_energy',
             'anodeV_timetag',
@@ -533,15 +543,6 @@ def build_results_for_chain(chain):
             'anodeH_energy',
         ]
     ].copy()
-    recoil_df.rename(
-        columns={
-            'imp_x': 'x',
-            'imp_y': 'y',
-            'imp_xE': 'xE',
-            'imp_timetag': 'timetag',
-        },
-        inplace=True,
-    )
     recoil_df['t'] = recoil_df['timetag'] * TO_S
 
     res = correlate_events(recoil_df, decay_df, chain, pixel_search_mode)
