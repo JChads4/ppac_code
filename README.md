@@ -34,11 +34,14 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
    - `max_memory_mb` – limit memory usage
 
    Output files include `dssd_non_vetoed_events.pkl`, `ppac_events.pkl`,
-   `rutherford_events.pkl`, a merged event pickle and processing logs.
+   `rutherford_events.pkl`, a merged event pickle and processing logs. If no
+   PPAC hits are present, `ppac_events.pkl` is not created.
 
 3. **Configure correlations**
-   
-   Edit `correlation_config.yaml` to set PPAC coincidence windows and define correlation chains.
+
+   Edit `correlation_config.yaml` to set PPAC coincidence windows and define correlation chains. A
+   top-level `ppac_window` section provides defaults, but each chain may override these values by
+   including its own `ppac_window` block.
 
 4. **Build correlations**
 
