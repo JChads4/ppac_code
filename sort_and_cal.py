@@ -17,14 +17,11 @@ import gc
 from datetime import datetime
 import warnings
 import psutil
-import csv
 import signal
 from contextlib import contextmanager, nullcontext
 import sys
-import tempfile
 import uuid
-import json
-import multiprocessing as mp
+
 from time_units import TO_S
 import re
 import shutil
@@ -117,7 +114,7 @@ def memory_limit(max_mb, safety_margin_mb=500):
         if used_mb > adjusted_limit:
             raise MemoryLimitExceeded(f"Memory limit approaching: {used_mb:.1f}MB used, limit is {adjusted_limit}MB")
         if check_critical_memory():
-            raise MemoryLimitExceeded(f"System memory critically low")
+            raise MemoryLimitExceeded("System memory critically low")
     
     # Check memory before entering context
     memory_check()
@@ -279,12 +276,12 @@ def memory_safe_sortcalSHREC(xdata, ydata, calibration_path, ecut=50, max_memory
     ydata['t2'] = np.round(ydata['timetag'] * TO_S, 5)
     
     # Apply calibration to all data at once
-    log_message(f"Applying calibration to X data...", include_memory=True)
+    log_message("Applying calibration to X data...", include_memory=True)
     xdata = xdata.join(calfile.set_index(['board', 'channel']), on=['board', 'channel'])
     xdata['calE'] = xdata['m'] * (xdata['energy'] - xdata['b'])
     xdata.drop(['energy', 'm', 'b'], axis=1, inplace=True)
     
-    log_message(f"Applying calibration to Y data...", include_memory=True)
+    log_message("Applying calibration to Y data...", include_memory=True)
     ydata = ydata.join(calfile.set_index(['board', 'channel']), on=['board', 'channel'])
     ydata['calE'] = ydata['m'] * (ydata['energy'] - ydata['b'])
     ydata.drop(['energy', 'm', 'b'], axis=1, inplace=True)
@@ -317,7 +314,6 @@ def memory_safe_sortcalSHREC(xdata, ydata, calibration_path, ecut=50, max_memory
     log_message(f"Processing time range [{t_min:.6f}, {t_max:.6f}] in {num_chunks} chunks of {chunk_time_window:.6f}s each")
     
     # Process each time window chunk separately
-    results = []
     for i in range(num_chunks):
         chunk_start = t_min + i * chunk_time_window
         chunk_end = t_min + (i + 1) * chunk_time_window
@@ -606,7 +602,7 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
     
     try:
         # 1. Extract ancillary data (PPAC and Rutherford) in a memory-efficient way
-        log_message(f"Extracting PPAC and Rutherford data...", output_paths['log'])
+        log_message("Extracting PPAC and Rutherford data...", output_paths['log'])
         ppac_data, ruth_data = extract_ancillary_data_chunked(
             csv_file, 
             chunksize=chunksize,
@@ -617,7 +613,7 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
                    output_paths['log'], include_memory=True)
         
         # 2. Process SHREC data in chunks
-        log_message(f"Processing SHREC data in chunks...", output_paths['log'])
+        log_message("Processing SHREC data in chunks...", output_paths['log'])
         shrec_results = process_shrec_data_chunked(
             csv_file, 
             shrec_map_path, 

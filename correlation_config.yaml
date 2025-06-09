@@ -1,3 +1,4 @@
+# Set `min_hits: 0` here or per-chain to disable PPAC coincidence requirements
 ppac_window:
   before_ns: 1700
   after_ns: 0

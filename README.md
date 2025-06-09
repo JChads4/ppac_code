@@ -43,6 +43,10 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
    top-level `ppac_window` section provides defaults, but each chain may override these values by
    including its own `ppac_window` block.
 
+   If a run was recorded **without** a PPAC detector, set `min_hits: 0` in the
+   relevant `ppac_window` so that all implant events are accepted. The code will
+   automatically build decay candidates from all events in this mode.
+
 4. **Build correlations**
 
    Run `python build_correlations.py [--run-dir RUN] [--base-dir DIR]` to create
@@ -68,4 +72,12 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
 ## Modifiable parameters
 
 Key parameters such as memory limits (`max_memory_mb`), chunk size (`chunksize`), energy cuts (`energy_cut`) and output directory names can be customised directly in the Python scripts before running them.
+
+## Runs without PPAC
+
+If your experiment did not include a PPAC detector, simply set
+`min_hits: 0` in `correlation_config.yaml` (either at the top-level
+`ppac_window` or within a specific chain). When `min_hits` is zero, all
+implant events are considered valid recoils and decay candidates are
+built from the full dataset.
 
