@@ -1,4 +1,3 @@
-import sys
 """Build PPAC correlation chains from processed detector data.
 
 This script loads per-run pickle files, searches for PPAC coincidences with
@@ -160,6 +159,7 @@ if pixel_search_mode not in ('single', 'square'):
     raise ValueError("pixel_search must be 'single' or 'square'")
 
 correlation_chains = config.get('chains', [])
+all_results = []
 for chain in correlation_chains:
     for step in chain.get('steps', []):
         for key in ['energy_min', 'energy_max', 'corr_min', 'corr_max']:
@@ -452,8 +452,12 @@ def build_results_for_chain(chain):
         + in_window(hits_df['dt_anodeH_ps']).astype(int)
     )
 
-    coincident_imp_df = hits_df[hits_in_window >= min_hits_chain].copy()
-    non_coincident_imp_df = hits_df[hits_in_window < min_hits_chain].copy()
+    if min_hits_chain == 0:
+        coincident_imp_df = hits_df.copy()
+        non_coincident_imp_df = hits_df.copy()
+    else:
+        coincident_imp_df = hits_df[hits_in_window >= min_hits_chain].copy()
+        non_coincident_imp_df = hits_df[hits_in_window < min_hits_chain].copy()
 
     if coincident_imp_df.empty:
         print(f"No coincidences found for chain {chain.get('name', 'chain')}")

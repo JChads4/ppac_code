@@ -6,8 +6,6 @@ Comprehensive utility functions for processing SHREC experimental data.
 
 import pandas as pd
 import numpy as np
-import os
-import matplotlib.pyplot as plt
 from time_units import TO_S
 
 def mapimp(dataframe, shrec_map):
