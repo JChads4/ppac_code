@@ -421,14 +421,6 @@ def main():
     del dssd, ppac, ruth, cathode, anodeV, anodeH
     gc.collect()
     
-    manual_offsets = {
-        0: 0,
-        1: -0.045e-6,
-        2: -0.065e-6,
-        3: -0.085e-6,
-        4: -0.105e-6,
-        5: -0.125e-6,
-    }
     
     # Build pixel history from all DSSD regions so escaping particles are included
     all_events = pd.concat([imp, boxE, boxW, boxT, boxB], ignore_index=True)
@@ -487,19 +479,10 @@ def main():
             decay_candidates_df = pd.DataFrame()
             return pd.DataFrame(), coincident_imp_df, decay_candidates_df
     
-        # Convert time differences from ps to µs and apply board offsets
+        # Convert time differences from ps to µs
         coincident_imp_df['dt_cathode_us'] = coincident_imp_df['dt_cathode_ps'] * TO_US
         coincident_imp_df['dt_anodeV_us'] = coincident_imp_df['dt_anodeV_ps'] * TO_US
         coincident_imp_df['dt_anodeH_us'] = coincident_imp_df['dt_anodeH_ps'] * TO_US
-        coincident_imp_df['dt_anodeH_us_corr'] = (
-            coincident_imp_df['dt_anodeH_us'] + coincident_imp_df['xboard'].map(manual_offsets)
-        )
-        coincident_imp_df['dt_anodeV_us_corr'] = (
-            coincident_imp_df['dt_anodeV_us'] + coincident_imp_df['xboard'].map(manual_offsets)
-        )
-        coincident_imp_df['dt_cathode_us_corr'] = (
-            coincident_imp_df['dt_cathode_us'] + coincident_imp_df['xboard'].map(manual_offsets)
-        )
     
         # Build decay candidates for this chain
         decay_candidates = []
