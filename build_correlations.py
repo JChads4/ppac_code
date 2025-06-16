@@ -25,8 +25,8 @@ from time_units import TO_S, TO_US, TO_NS
 
 # Time window in picoseconds used to merge energy deposits from
 # the IMP pixel and surrounding box regions into a single decay
-# event. This is set to 1 microsecond by default.
-COMBINE_WINDOW_PS = int(1e6)
+# event. This is set to 1 ns by default.
+COMBINE_WINDOW_PS = int(1e3)
 
 
 # ============================================================================
