@@ -49,18 +49,20 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
 
 4. **Build correlations**
 
-   Run `python build_correlations.py [--run-dir RUN] [--base-dir DIR] [--max-memory-mb MB]` to create
+   Run `python build_correlations.py [--run-dir RUN] [--base-dir DIR] [--max-memory-mb MB] [--decay-first]` to create
    pickled correlation data. `--run-dir` defaults to the `RUN_DIR` environment
    variable (falling back to `long_run_4mbar_500V` if unset). `--base-dir`
    places the results under `correlations/<DIR>/`. The optional
-   `--max-memory-mb` flag enforces a memory limit during processing.
+   `--max-memory-mb` flag enforces a memory limit during processing. Passing
+   `--decay-first` reverses the correlation logic so decays are scanned before
+   searching backward for prior events.
 
 5. **Batch processing** (optional)
 
-   `python run_correlations_from_list.py --run-list file_list_correlations.txt [--base-dir DIR] [--max-memory-mb MB]`
+   `python run_correlations_from_list.py --run-list file_list_correlations.txt [--base-dir DIR] [--max-memory-mb MB] [--decay-first]`
    will run `build_correlations.py` for each entry, merge the results and
-   remove the per-run output folders. The memory limit option is forwarded to
-   each subprocess.
+   remove the per-run output folders. The memory limit and `--decay-first`
+   options are forwarded to each subprocess.
 
 6. **Analyse**
    

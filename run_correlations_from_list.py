@@ -14,6 +14,8 @@ def main():
                         help='Directory used to store correlation outputs')
     parser.add_argument('--max-memory-mb', type=float, default=None,
                         help='Optional memory limit in MB for each subprocess')
+    parser.add_argument('--decay-first', action='store_true',
+                        help='Search correlations starting from decays')
     args = parser.parse_args()
 
     runs = load_file_list(args.run_list)
@@ -25,6 +27,8 @@ def main():
                '--base-dir', args.base_dir]
         if args.max_memory_mb is not None:
             cmd += ['--max-memory-mb', str(args.max_memory_mb)]
+        if args.decay_first:
+            cmd += ['--decay-first']
         subprocess.run(cmd, check=True, env=env)
 
     # Merge per-run pickle files into combined dataframes
