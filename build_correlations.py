@@ -47,6 +47,8 @@ parser.add_argument('--base-dir', default='',
                     help='Optional subdirectory under correlations/')
 parser.add_argument('--max-memory-mb', type=float, default=None,
                     help='Optional maximum memory usage in MB')
+parser.add_argument('--decay-first', action='store_true',
+                    help='Start correlations from decay events and search backwards')
 args = parser.parse_args()
 
 RUN_DIR = args.run_dir
@@ -542,10 +544,10 @@ def main():
         ].copy()
         recoil_df['t'] = recoil_df['timetag'] * TO_S
     
-        res = correlate_events(recoil_df, decay_df, chain, pixel_search_mode)
+        res = correlate_events(recoil_df, decay_df, chain, pixel_search_mode, reverse=args.decay_first)
         return res, coincident_imp_df, decay_candidates_df
     
-    def correlate_events(recoil_df, decay_df, chain, pixel_mode='single'):
+    def correlate_events(recoil_df, decay_df, chain, pixel_mode='single', reverse=False):
         """Build correlations for a single chain configuration.
     
         Parameters
@@ -561,22 +563,37 @@ def main():
             surrounding square is searched.
         """
         steps = chain['steps']
-        first = steps[0]
-        recoils = recoil_df[(recoil_df['xE'] >= first.get('energy_min', 0)) &
-                            (recoil_df['xE'] <= first.get('energy_max', np.inf))].copy()
-        recoils.rename(columns={'x': f"{first['label']}_x",
-                                'y': f"{first['label']}_y",
-                                't': f"{first['label']}_t",
-                                'xE': f"{first['label']}_xE"}, inplace=True)
-        stage_df = recoils
-        prev_label = first['label']
-    
-        # Track which events from each dataset have been used so that the same decay
-        # event is not matched to multiple recoil chains.
         used_recoil_idx = set()
         used_decay_idx = set()
+
+        if not reverse:
+            first = steps[0]
+            recoils = recoil_df[(recoil_df['xE'] >= first.get('energy_min', 0)) &
+                                (recoil_df['xE'] <= first.get('energy_max', np.inf))].copy()
+            recoils.rename(columns={'x': f"{first['label']}_x",
+                                    'y': f"{first['label']}_y",
+                                    't': f"{first['label']}_t",
+                                    'xE': f"{first['label']}_xE"}, inplace=True)
+            stage_df = recoils
+            prev_label = first['label']
+            step_iter = steps[1:]
+        else:
+            last = steps[-1]
+            dataset = recoil_df if last.get('ppac_required') else decay_df
+            recoils = dataset[(dataset['xE'] >= last.get('energy_min', 0)) &
+                              (dataset['xE'] <= last.get('energy_max', np.inf))].copy()
+            recoils.rename(columns={'x': f"{last['label']}_x",
+                                    'y': f"{last['label']}_y",
+                                    't': f"{last['label']}_t",
+                                    'xE': f"{last['label']}_xE"}, inplace=True)
+            stage_df = recoils
+            prev_label = last['label']
+            step_iter = reversed(steps[:-1])
+
+        # Track which events from each dataset have been used so that the same event
+        # is not matched to multiple chains.
     
-        for step in steps[1:]:
+        for step in step_iter:
             label = step['label']
             use_recoil = step.get('ppac_required')
             dataset = recoil_df if use_recoil else decay_df
@@ -595,20 +612,33 @@ def main():
                     pixel_events = dataset[(dataset['x'].between(px-1, px+1)) & (dataset['y'].between(py-1, py+1))]
                 else:
                     raise ValueError(f"Unknown pixel_mode: {pixel_mode}")
-    
-                # Exclude events that have already been paired with another recoil
+
+                # Exclude events that have already been paired with another chain
                 pixel_events = pixel_events.loc[~pixel_events.index.isin(used_set)]
-    
-                after = pixel_events[pixel_events['t'] > row[f'{prev_label}_t']]
-                energy_sel = after[(after['xE'] >= e_min) & (after['xE'] <= e_max)]
-                if energy_sel.empty:
-                    continue
-                energy_sel = energy_sel.copy()
-                energy_sel['dt'] = energy_sel['t'] - row[f'{prev_label}_t']
-                window = energy_sel[(energy_sel['dt'] >= dt_min) & (energy_sel['dt'] <= dt_max)]
-                if window.empty:
-                    continue
-                evt = window.iloc[0]
+
+                if not reverse:
+                    search = pixel_events[pixel_events['t'] > row[f'{prev_label}_t']]
+                    energy_sel = search[(search['xE'] >= e_min) & (search['xE'] <= e_max)]
+                    if energy_sel.empty:
+                        continue
+                    energy_sel = energy_sel.copy()
+                    energy_sel['dt'] = energy_sel['t'] - row[f'{prev_label}_t']
+                    window = energy_sel[(energy_sel['dt'] >= dt_min) & (energy_sel['dt'] <= dt_max)]
+                    if window.empty:
+                        continue
+                    evt = window.iloc[0]
+                else:
+                    search = pixel_events[pixel_events['t'] < row[f'{prev_label}_t']]
+                    energy_sel = search[(search['xE'] >= e_min) & (search['xE'] <= e_max)]
+                    if energy_sel.empty:
+                        continue
+                    energy_sel = energy_sel.copy()
+                    energy_sel['dt'] = row[f'{prev_label}_t'] - energy_sel['t']
+                    window = energy_sel[(energy_sel['dt'] >= dt_min) & (energy_sel['dt'] <= dt_max)]
+                    if window.empty:
+                        continue
+                    # Use the last event before the current one
+                    evt = window.iloc[-1]
                 used_set.add(evt.name)
                 new_row = row.to_dict()
                 new_row[f'{label}_x'] = evt['x']
