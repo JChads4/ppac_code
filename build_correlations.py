@@ -23,10 +23,9 @@ from memory_utils import memory_limit, MemoryLimitExceeded
 
 from time_units import TO_S, TO_US, TO_NS
 
-# Time window in picoseconds used to merge energy deposits from
-# the IMP pixel and surrounding box regions into a single decay
-# event. This is set to 1 ns by default.
-COMBINE_WINDOW_PS = int(1e3)
+# Default time window in picoseconds used to merge energy deposits from
+# the IMP pixel and surrounding box regions into a single decay event.
+DEFAULT_BOX_WINDOW_PS = int(1e3)
 
 
 # ============================================================================
@@ -97,7 +96,7 @@ def split_ppac_detectors(ppac):
     return cathode, anodeV, anodeH
 
 
-def prepare_decay_df(non_coincident_imp_df, box_regions, combine_window_ps=COMBINE_WINDOW_PS):
+def prepare_decay_df(non_coincident_imp_df, box_regions, combine_window_ps=DEFAULT_BOX_WINDOW_PS):
     """Return decay-like events combining energy from IMP and box regions.
 
     Parameters
@@ -158,6 +157,12 @@ ppac_cfg = {k: _to_float_if_str(v) for k, v in config.get('ppac_window', {}).ite
 window_before_ns = ppac_cfg.get('before_ns', 1700)
 window_after_ns = ppac_cfg.get('after_ns', 0)
 min_ppac_hits = ppac_cfg.get('min_hits', 3)
+
+# Surrounding box detector settings
+box_cfg = {k: _to_float_if_str(v) for k, v in config.get('box_events', {}).items()}
+USE_BOX_EVENTS = box_cfg.get('enabled', True)
+box_window_ns = box_cfg.get('combine_window_ns', 1)
+box_combine_window_ps = int(box_window_ns * 1000)
 
 # Pixel search mode for correlations
 pixel_search_mode = config.get('pixel_search', 'single')
@@ -422,8 +427,12 @@ def main():
     gc.collect()
     
     
-    # Build pixel history from all DSSD regions so escaping particles are included
-    all_events = pd.concat([imp, boxE, boxW, boxT, boxB], ignore_index=True)
+    # Build pixel history from DSSD regions. Include surrounding box events
+    # unless disabled in the configuration.
+    if USE_BOX_EVENTS:
+        all_events = pd.concat([imp, boxE, boxW, boxT, boxB], ignore_index=True)
+    else:
+        all_events = imp.copy()
     all_events['t'] = all_events['tagx'] * TO_S
     pixel_groups = all_events.groupby(['x', 'y'])
     pixel_history = {pix: grp.sort_values('t') for pix, grp in pixel_groups}
@@ -523,8 +532,12 @@ def main():
                 np.abs(decay_candidates_df['t'] - decay_candidates_df['recoil_time_sec'])
             )
     
-        box_regions = {"boxE": boxE, "boxW": boxW, "boxT": boxT, "boxB": boxB}
-        decay_df = prepare_decay_df(non_coincident_imp_df, box_regions)
+        if USE_BOX_EVENTS:
+            box_regions = {"boxE": boxE, "boxW": boxW, "boxT": boxT, "boxB": boxB}
+        else:
+            box_regions = {}
+        decay_df = prepare_decay_df(non_coincident_imp_df, box_regions,
+                                   combine_window_ps=box_combine_window_ps)
     
         recoil_df = coincident_imp_df[
             [
