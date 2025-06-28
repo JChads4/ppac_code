@@ -43,6 +43,11 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
    top-level `ppac_window` section provides defaults, but each chain may override these values by
    including its own `ppac_window` block.
 
+   The optional `box_events` section controls whether decay candidates include
+   hits from the surrounding box detectors and how closely in time those hits
+   must occur to be merged with the implant pixel. Set `enabled: false` to
+   ignore box data or adjust `combine_window_ns` to change the merge window.
+
    If a run was recorded **without** a PPAC detector, set `min_hits: 0` in the
    relevant `ppac_window` so that all implant events are accepted. The code will
    automatically build decay candidates from all events in this mode.

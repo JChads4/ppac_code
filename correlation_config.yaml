@@ -4,6 +4,13 @@ ppac_window:
   after_ns: 0
   min_hits: 3
 
+# Use surrounding box detector events when building decay candidates.
+# combine_window_ns controls how closely in time box hits must appear to
+# be merged with an IMP pixel hit. Set `enabled: false` to ignore box data.
+box_events:
+  enabled: true
+  combine_window_ns: 1
+
 pixel_search: single
 
 chains:
