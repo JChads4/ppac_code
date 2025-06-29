@@ -502,27 +502,51 @@ def process_shrec_data_chunked(csv_file, shrec_map_path, calibration_path, ecut=
     # Helper function to merge and process a detector type
     def merge_and_process(x_key, y_key, result_key):
         if detector_data[x_key] and detector_data[y_key]:
+            # Temporary file to store incremental results
+            temp_file = os.path.join(TEMP_FOLDER, f"{result_key}_{uuid.uuid4().hex}.pkl")
             try:
-                # Merge all chunks for X and Y
-                log_message(f"Merging {len(detector_data[x_key])} X chunks and {len(detector_data[y_key])} Y chunks for {result_key}...", 
-                          include_memory=True)
-                
-                x_merged = pd.concat(detector_data[x_key], ignore_index=True)
-                y_merged = pd.concat(detector_data[y_key], ignore_index=True)
-                
-                # Apply sortcalSHREC to get the clean data
-                log_message(f"Running sortcalSHREC for {result_key}...", include_memory=True)
-                results[result_key] = memory_safe_sortcalSHREC(
-                    x_merged, y_merged, calibration_path, ecut=ecut, max_memory_mb=max_memory_mb
+                log_message(
+                    f"Processing {len(detector_data[x_key])} X/Y chunk pairs for {result_key} sequentially...",
+                    include_memory=True,
                 )
-                
-                # Free memory immediately
-                del detector_data[x_key], detector_data[y_key], x_merged, y_merged
+
+                # Process each chunk pair individually
+                for idx, (x_chunk, y_chunk) in enumerate(zip(detector_data[x_key], detector_data[y_key])):
+                    log_message(
+                        f"Running sortcalSHREC for {result_key} chunk {idx+1}/{len(detector_data[x_key])}...",
+                        include_memory=True,
+                    )
+                    chunk_result = memory_safe_sortcalSHREC(
+                        x_chunk,
+                        y_chunk,
+                        calibration_path,
+                        ecut=ecut,
+                        max_memory_mb=max_memory_mb,
+                    )
+
+                    # Append chunk result to disk
+                    write_dataframe_to_pickle(chunk_result, temp_file)
+
+                    # Free memory
+                    del chunk_result, x_chunk, y_chunk
+                    gc.collect()
+
+                # Load all results from disk
+                if os.path.exists(temp_file):
+                    results[result_key] = pd.read_pickle(temp_file)
+                    os.remove(temp_file)
+                else:
+                    results[result_key] = pd.DataFrame()
+
+                # Free stored chunks
+                del detector_data[x_key], detector_data[y_key]
                 gc.collect()
-                
+
             except Exception as e:
                 log_message(f"Error processing {result_key}: {str(e)}")
                 results[result_key] = pd.DataFrame()
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
         else:
             results[result_key] = pd.DataFrame()
     
