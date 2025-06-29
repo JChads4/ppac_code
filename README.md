@@ -35,7 +35,8 @@ Install dependencies with `pip install pandas numpy matplotlib psutil pyyaml`.
 
    Output files include `dssd_non_vetoed_events.pkl`, `ppac_events.pkl`,
    `rutherford_events.pkl`, a merged event pickle and processing logs. If no
-   PPAC hits are present, `ppac_events.pkl` is not created.
+   PPAC hits are present, `ppac_events.pkl` is not created. The Rutherford
+   events file is always produced (it will be empty if no hits occurred).
 
 3. **Configure correlations**
 

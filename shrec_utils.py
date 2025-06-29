@@ -313,22 +313,27 @@ def extract_rutherford_data(raw_df):
         
         # Combine all Rutherford data
         ruth_data = pd.concat([ruthE, ruthW], ignore_index=True)
-        
-        # Convert timetag to seconds
+
+        cols = ['t', 'energy', 'board', 'channel', 'detector', 'timetag', 'nfile']
+
+        # Convert timetag to seconds if any data are present
         if len(ruth_data) > 0:
             ruth_data['t'] = np.round(ruth_data['timetag'] * TO_S, 6)
-            
+
             # Sort by time
             ruth_data = ruth_data.sort_values(by='t').reset_index(drop=True)
-            
+
             # Select columns for output
-            ruth_data = ruth_data[['t', 'energy', 'board', 'channel', 'detector', 'timetag', 'nfile']]
-            
+            ruth_data = ruth_data[cols]
+        else:
+            ruth_data = pd.DataFrame(columns=cols)
+
         return ruth_data
         
     except Exception as e:
         print(f"Error extracting Rutherford data: {str(e)}")
-        return pd.DataFrame()
+        cols = ['t', 'energy', 'board', 'channel', 'detector', 'timetag', 'nfile']
+        return pd.DataFrame(columns=cols)
 
 def detmerge(dssd_events, veto_events, time_window=400000e-12):
     """
