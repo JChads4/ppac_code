@@ -270,7 +270,7 @@ def extract_ppac_data(raw_df):
         cathode = raw_df[(raw_df['board'] == 9) & (raw_df['channel'] == 10)].copy()
         anodev = raw_df[(raw_df['board'] == 9) & (raw_df['channel'] == 12)].copy()
         anodeh = raw_df[(raw_df['board'] == 9) & (raw_df['channel'] == 8)].copy()
-        
+
         # Add detector identifier
         if len(cathode) > 0:
             cathode['detector'] = 'cathode'
@@ -278,25 +278,30 @@ def extract_ppac_data(raw_df):
             anodev['detector'] = 'anodeV'
         if len(anodeh) > 0:
             anodeh['detector'] = 'anodeH'
-        
+
         # Combine all PPAC data
         ppac_data = pd.concat([cathode, anodev, anodeh], ignore_index=True)
-        
-        # Convert timetag to seconds
+
+        cols = ['t', 'energy', 'board', 'channel', 'detector', 'timetag', 'nfile']
+
+        # Convert timetag to seconds if any data are present
         if len(ppac_data) > 0:
             ppac_data['t'] = np.round(ppac_data['timetag'] * TO_S, 6)
-            
+
             # Sort by time
             ppac_data = ppac_data.sort_values(by='t').reset_index(drop=True)
-            
+
             # Select columns for output
-            ppac_data = ppac_data[['t', 'energy', 'board', 'channel', 'detector', 'timetag', 'nfile']]
-            
+            ppac_data = ppac_data[cols]
+        else:
+            ppac_data = pd.DataFrame(columns=cols)
+
         return ppac_data
-        
+
     except Exception as e:
         print(f"Error extracting PPAC data: {str(e)}")
-    return pd.DataFrame()
+        cols = ['t', 'energy', 'board', 'channel', 'detector', 'timetag', 'nfile']
+        return pd.DataFrame(columns=cols)
 
 def extract_rutherford_data(raw_df):
     """Extract Rutherford detector data from raw dataframe."""

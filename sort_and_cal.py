@@ -575,8 +575,17 @@ def extract_ancillary_data_chunked(csv_file, chunksize=50000, max_memory_mb=None
         # Continue with what we have so far
     
     # Merge results if any chunks were found
-    ppac_data = pd.concat(ppac_chunks, ignore_index=True) if ppac_chunks else pd.DataFrame()
-    ruth_data = pd.concat(ruth_chunks, ignore_index=True) if ruth_chunks else pd.DataFrame()
+    empty_cols = ['t', 'energy', 'board', 'channel', 'detector', 'timetag', 'nfile']
+    ppac_data = (
+        pd.concat(ppac_chunks, ignore_index=True)
+        if ppac_chunks
+        else pd.DataFrame(columns=empty_cols)
+    )
+    ruth_data = (
+        pd.concat(ruth_chunks, ignore_index=True)
+        if ruth_chunks
+        else pd.DataFrame(columns=empty_cols)
+    )
     
     # Final cleanup
     del ppac_chunks, ruth_chunks
