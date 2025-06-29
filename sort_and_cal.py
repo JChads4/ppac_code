@@ -587,6 +587,8 @@ def extract_ancillary_data_chunked(csv_file, chunksize=50000, max_memory_mb=None
 def write_dataframe_to_pickle(df, output_path):
     """Append DataFrame to a pickle file."""
     if len(df) == 0:
+        if not os.path.exists(output_path):
+            df.to_pickle(output_path)
         return 0
     if os.path.exists(output_path):
         existing = pd.read_pickle(output_path)
@@ -699,11 +701,11 @@ def process_file(csv_file, output_paths, shrec_map_path, calibration_path,
             del ppac_data
             gc.collect()
 
-        if len(ruth_data) > 0:
-            write_dataframe_to_pickle(ruth_data, output_paths['rutherford'])
-            # Free memory immediately
-            del ruth_data
-            gc.collect()
+        # Always write Rutherford data so that downstream steps can rely on the file
+        write_dataframe_to_pickle(ruth_data, output_paths['rutherford'])
+        # Free memory immediately
+        del ruth_data
+        gc.collect()
         
         # 6. Free memory for remaining large objects
         if 'veto_events' in locals():
